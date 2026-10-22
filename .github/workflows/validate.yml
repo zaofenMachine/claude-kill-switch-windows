@@ -1,0 +1,34 @@
+name: Offline validation
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  source-checks:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: node --test tests/allowlist.test.mjs
+      - run: python -m unittest discover -s tests -p 'test_*.py'
+      - run: python scripts/check-publication.py
+      - name: Parse PowerShell scripts
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          Get-ChildItem scripts -Filter '*.ps1' | ForEach-Object {
+            $tokens=$null; $errors=$null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$tokens,[ref]$errors)
+            if($errors.Count){throw ('Parse failed: '+$_.Name)}
+          }
+      - name: Compile local helpers without launching them
+        shell: powershell
+        run: |
+          ./scripts/Initialize-Local.ps1
+          ./scripts/Build-Helpers.ps1
+          $hash=(Get-FileHash templates/firefox-policies.json -Algorithm SHA256).Hash
+          if(!(Select-String -LiteralPath src/ClaudeSafeBrowser.cs -SimpleMatch $hash)){throw 'Policy bytes and launcher hash differ.'}

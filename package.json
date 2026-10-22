@@ -1,0 +1,9 @@
+{
+  "name": "claude-kill-switch-windows",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Reference configuration and local tooling for an app-scoped Windows kill switch",
+  "engines": { "node": ">=22" },
+  "scripts": { "test": "node --test tests/allowlist.test.mjs" }
+}
