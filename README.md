@@ -18,7 +18,7 @@ Claude Desktop ── 固定 HTTP 代理 ──┐
 - **精确白名单**：名称、类型、服务器、端口匹配且没有代理链、重名冲突的叶节点才进入分组。分组为手动 `select`，默认和空分组后备均为 `REJECT`。
 - **系统级阻断**：为审计过的可执行文件生成 simplewall 配置，最终由持久化 Windows Filtering Platform 规则阻断非专用代理连接。
 - **登录交接**：可注册 Claude Safe Firefox。Desktop 外部登录时临时将它设为默认浏览器，成功回到 Desktop 后可以切回。
-- **更新维护**：应用换版本、换路径后需要重新审计。可用版本限制防止未覆盖的新版本提前运行，步骤见文档。
+- **更新维护**：Desktop 包版本限制与内置引擎的 EXE 路径限制分开处理。在已审计的引擎根目录内，仅已保护的路径可启动，更新生成新路径时先拒绝，维护规则后再放行。
 
 TUN 或系统代理开关不决定固定代理的地址；但切换 TUN、重载配置或停止内核可能中断连接。外部 MCP 工具、虚拟机、系统代理进程不会因为由 Claude 启动就自动继承路径规则。
 
@@ -44,8 +44,11 @@ TUN 或系统代理开关不决定固定代理的地址；但切换 TUN、重载
 | --- | --- | --- |
 | `scripts/generate-extension.mjs` | 生成本地全局扩展 | 否 |
 | `scripts/Inspect-Desktop.ps1` | 枚举已安装包及可执行路径，写本地清单 | 否 |
+| `scripts/Inspect-DesktopRuntime.ps1` | 核对运行中 claude.exe 的实际/内核路径、包身份及签名 | 否 |
 | `scripts/prepare_firewall.py` | 生成待审阅的 simplewall 配置 | 否 |
+| `scripts/engine_gate.py` | 准备内置引擎的 EXE 启动限制；拒绝自动覆盖已有 EXE 策略 | 否 |
 | `scripts/compare_wfp.py` | 与本机已审计基线比较 WFP 规则 | 否 |
+| `scripts/verify_wfp_extension.py` | 验证旧规则保留，新增路径仅复制已审计的阻断范围 | 否 |
 | `scripts/check-proxy.mjs` | 无账号检查专用代理出口国家，隐藏明文出口 IP | 否；会访问 Cloudflare |
 | `scripts/Register-ClaudeBrowser.ps1` | `Check` 检查、`Register` 注册、`Remove` 撤销专用浏览器入口 | Register/Remove 改当前用户注册表；不自动设为默认 |
 | 根目录三个 CMD | 打开专用浏览器、出口测试页、Windows 默认应用设置 | 打开应用或设置页 |
@@ -58,6 +61,7 @@ TUN 或系统代理开关不决定固定代理的地址；但切换 TUN、重载
 - [保护范围与限制](docs/architecture.md)
 - [测试步骤与已知证据](docs/testing.md)
 - [应用更新及回滚](docs/maintenance.md)
+- [内置引擎独立更新的保护](docs/engine-updates.md)
 - [哪些内容没有上传，以及如何在本机准备](docs/private-materials.md)
 - [第三方组件](THIRD_PARTY.md)
 

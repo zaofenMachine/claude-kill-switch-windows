@@ -55,6 +55,14 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\scripts\Inspect-
 
 枚举不会自动审计所有辅助程序；检查签名、实际版本和用途。传统安装包与 MSIX 路径结构可能不同，脚本不识别时应停止并人工确认。
 
+还应在 Desktop 正常运行时执行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\scripts\Inspect-DesktopRuntime.ps1
+```
+
+核对 `private/desktop-runtime.json`。MSIX 下，CIM 的 `reportedPath` 可能是逻辑目录，WFP 应匹配通过 `QueryFullProcessImageName` 获取的实际文件/内核路径。若发现包外内置引擎，把审计过的 `actualPath` 加入 targets，并按 [内置引擎保护流程](engine-updates.md) 处理其独立更新。出现 `inspectionError` 的记录必须另行解决，不能当作覆盖成功。
+
 ## 4. 生成并安装路径级阻断
 
 ```powershell
