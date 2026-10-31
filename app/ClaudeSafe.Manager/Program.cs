@@ -1,0 +1,42 @@
+using System;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
+using System.Windows.Forms;
+
+namespace ClaudeSafe.Manager;
+
+internal static class Program
+{
+    [STAThread]
+    private static void Main(string[] args)
+    {
+        ApplicationConfiguration.Initialize();
+        var data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClaudeSafe", "Manager");
+        string? screenshot = null;
+        for (var i = 0; i < args.Length; i++)
+        {
+            if (args[i] == "--data" && i + 1 < args.Length) data = args[++i];
+            else if (args[i] == "--screenshot" && i + 1 < args.Length) screenshot = args[++i];
+        }
+
+        try
+        {
+            data = Path.GetFullPath(data);
+            var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(data.ToUpperInvariant())))[..20];
+            using var instance = new Mutex(true, @"Local\ClaudeSafe.Manager." + key, out var created);
+            if (!created)
+            {
+                MessageBox.Show("此配置目录的 ClaudeSafe 管理窗口已经运行。请从系统托盘打开。", "ClaudeSafe", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            using var manager = new ManagerService(data);
+            Application.Run(new MainForm(manager, screenshot));
+        }
+        catch (Exception)
+        {
+            MessageBox.Show("管理器无法启动。请检查本地数据目录是否可读写，或查看本机诊断记录。", "ClaudeSafe", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+}

@@ -1,5 +1,7 @@
 # Claude Kill Switch for Windows
 
+新增 [ClaudeSafe Windows 管理器](docs/standalone-manager.md)：通过独立 Mihomo 内核管理专用通道，提供节点批准、切换、导入、匿名出口检查与托盘。Clash Verge 可继续管理日常系统代理或 TUN；迁移需要先移交专用端口，并保留已有 WFP 与 AppLocker。
+
 面向 **Claude Desktop 和独立 Firefox** 的定向断网保护参考实现：让指定程序只能连接本机专用代理；代理不可用时连接失败，而不是尝试直连。
 
 本仓库提供可复用源码、默认拒绝的模板和人工部署步骤，**不是一键安装器**。克隆仓库或只配置 Clash 分组，不会自动建立系统级保护。
@@ -62,6 +64,7 @@ TUN 或系统代理开关不决定固定代理的地址；但切换 TUN、重载
 - [测试步骤与已知证据](docs/testing.md)
 - [应用更新及回滚](docs/maintenance.md)
 - [内置引擎独立更新的保护](docs/engine-updates.md)
+- [独立 Windows 管理器、迁移及共存验收](docs/standalone-manager.md)
 - [哪些内容没有上传，以及如何在本机准备](docs/private-materials.md)
 - [第三方组件](THIRD_PARTY.md)
 

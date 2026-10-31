@@ -1,0 +1,80 @@
+# 独立 Windows 管理器
+
+ClaudeSafe Manager 使用自己启动的 Mihomo 子进程。日常代理由 Clash Verge 管理，Claude Desktop 与专用 Firefox 继续连接 `127.0.0.1:17987`。
+
+## 构建与准备
+
+需要 Windows、.NET 10 SDK（构建）及 .NET 10 Desktop Runtime（运行）：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File scripts\Build-Manager.ps1
+```
+
+Mihomo 不随仓库分发。自行从可信来源获取并核验后，放在本地数据目录的 `bin\claude-safe-mihomo.exe`。数据目录默认 `%LOCALAPPDATA%\ClaudeSafe\Manager`，也可以用 `--data` 指定。
+
+在数据目录准备 `settings.json`，以下空值必须替换为本机核实结果：
+
+```json
+{
+  "corePath": "",
+  "coreSha256": "",
+  "interfaceName": "",
+  "expectedCountry": "SG",
+  "pins": []
+}
+```
+
+`corePath` 为完整路径，`coreSha256` 为该文件的 SHA-256。`interfaceName` 必须是联网的真实物理网卡。批准项只包含节点的 `name/type/server/port`，完整节点凭据另存本机 `source.json`，格式为 `{"proxies":[]}`。可以从界面导入 Mihomo YAML/JSON 或通过 HTTPS 下载；导入只读取叶节点，不执行订阅脚本、不照搬其路由、TUN、管理端口或 provider。新节点必须逐个明确批准。
+
+```powershell
+.\runtime\manager-app\ClaudeSafe.Manager.exe --data "<本地数据目录>"
+```
+
+界面可以启动/停止内核、选择已批准节点、立即阻断、检查匿名出口、导入配置及维护批准名单。关闭窗口保留托盘；从托盘退出会停止本工具拥有的内核。每次启动内核先选 REJECT，需要主动选择节点才通网。界面退出或崩溃时，Windows Job 负责结束其内核。
+
+## 网络与保护范围
+
+- 代理仅监听回环 `17987`，控制 API 使用独立的回环 `17990` 与随机密钥。端口已有其他进程占用时拒绝启动。
+- 内核配置不启用 TUN，不修改系统代理，不接管系统 DNS。工作目录和缓存独立；不通过 Verge 普通端口连接节点。
+- 精确批准的叶节点才进入专用组，缺失、重名、身份变化、代理链、跳过证书验证等情况拒绝使用；没有 DIRECT 回退。
+- 已部署的 WFP 路径规则与 Desktop/AppLocker 限制仍须另外保留。管理器本身不会自动安装、撤销或证明这些系统级保护；一台新机器仅启动这个窗口不等于已启用 Kill Switch。
+- 匿名出口检查仅验证该时刻 Cloudflare 请求的出口地区，不证明账号安全或全部应用流量。
+
+## 与 Clash Verge 共存
+
+系统代理仍可指向 Verge 普通端口。专用内核显式绑定真实网卡，其节点解析使用单独配置；Verge 的系统代理开关不应改变专用监听地址。
+
+Verge TUN 会改变系统路由和 DNS 行为，需要在实际机器上检查专用内核的出站地址及 Verge 连接记录。`interface-name` 并非所有系统状态下都能保证绕过 TUN；物理网卡 forwarding、其他 VPN、断线换网卡等都可能影响结果。网卡变更后应停止专用通道、重新选择并验收。
+
+## 从原 Verge 扩展迁移
+
+先关闭受保护客户端，确认原 WFP 与 AppLocker 生效，保存当时的全局脚本、缓存、运行模式、TUN、其他组选择和系统代理状态。新配置只移除自己拥有的 Claude listener、Claude-Safe 组与六条域名规则；出现其他引用时停止并人工合并。
+
+移除旧的全局扩展注入逻辑，并同步 Verge 缓存与运行态，再把 `17987` 交给新内核。Verge 完整配置重载可能短暂影响普通连接，需要准备本次快照的恢复入口。迁移后禁止旧安装/扩展/整核恢复脚本重新写入该端口。
+
+本仓库的 `src/detach-verge.mjs` 只提供纯配置变换，不自动操作另一客户端。原机器的迁移脚本、订阅与恢复快照留在本机。
+
+## 验收
+
+1. 首次启动为 REJECT；未知节点和普通代理端口不能成为客户端后备。
+2. 选择批准节点，检查专用出口、实际上游服务器及物理网卡地址。
+3. Verge 开、关 TUN 后重复检查，核对其其他组选择与系统代理恢复。
+4. 停止/崩溃专用管理器，确认受保护程序无法改走普通代理或直连，对照程序仍能连接。
+5. 保留系统规则比较与真实客户端证据；不把 TCP 快照、纯配置测试或浏览器出口扩展为零泄漏证明。
+
+开发检查：`dotnet run --project app/ClaudeSafe.Manager.Tests`。实际联网验收需要另外准备本机私有配置。
+
+## 一次本机迁移的记录
+
+2026-11-01 的一次实机迁移保留了原 14 个批准节点、10 个 WFP 保护路径与 AppLocker 限制。专用监听从 Verge 移交给复制后固定哈希的独立内核。
+
+- 默认 REJECT 和未知节点拒绝通过；系统代理开启时专用匿名出口为 SG。
+- Verge TUN 开启时，专用出口仍为 SG，上游连接源地址匹配物理网卡，Verge 连接记录未观察到该专用内核被转发；随后恢复原 TUN 状态和普通节点选择。
+- 暂停 Verge 内核期间，专用出口仍为 SG；独立恢复任务已准备，实际恢复普通内核和原节点选择成功。
+- 强制结束管理器诊断宿主后，Job 清理了专用内核与两个监听；受保护探针访问普通代理及直连返回 10013，对照可用。
+- 实际 Desktop 的健康采样为 38 条 TCP 观测，全部指向专用端口；停止专用内核后 4 次采样均无已建立 TCP。实际进程路径均在保护清单内，没有发送聊天消息。采样不覆盖所有短连接或 UDP。
+- 23 项管理器离线检查、17 项 Node 检查及 19 项 Python 检查通过；另实测在没有 UI 消息泵的上下文中刷新并同步释放，子内核退出且未等待界面线程。实际窗口截图已检查。系统 UI 自动化无法取得窗口的辅助功能状态/屏幕帧，未把它算成按钮点击验收。
+
+以上是该机器和节点在测试时刻的结果，不保证其他机器、未来网卡状态或节点可用性。原始路径、IP、凭据、错误记录及恢复快照只保留在本机。
+
+参考：[Mihomo 管理 API 与出站接口](https://wiki.metacubex.one/config/general/)、[TUN](https://wiki.metacubex.one/config/inbound/tun/)、[DNS 接口参数](https://wiki.metacubex.one/config/dns/)。
