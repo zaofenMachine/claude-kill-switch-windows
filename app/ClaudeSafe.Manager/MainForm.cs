@@ -37,6 +37,7 @@ public sealed class MainForm : Form
     private readonly Button stop = ActionButton("停止内核");
     private readonly Button reject = ActionButton("立即阻断");
     private readonly Button probe = ActionButton("检测专用出口");
+    private readonly Button desktopBenchmark = ActionButton("Desktop 测速 / 定时");
     private readonly Button select = ActionButton("使用所选节点", true);
     private readonly Button approve = ActionButton("批准所选节点");
     private readonly Button revoke = ActionButton("移除批准");
@@ -50,6 +51,7 @@ public sealed class MainForm : Form
     private bool running;
     private string selectedNode = "REJECT";
     private string savedInterface = "";
+    private DesktopBenchmarkForm? benchmarkWindow;
 
     public MainForm(ManagerService manager, string? screenshotPath = null)
     {
@@ -138,8 +140,8 @@ public sealed class MainForm : Form
         content.Controls.Add(cards, 0, 0);
 
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, Margin = Padding.Empty, Padding = new Padding(0, 6, 0, 0), WrapContents = false };
-        actions.Controls.AddRange(new Control[] { start, stop, reject, probe });
-        var hint = Detail("停止或阻断后，受保护程序应无法联网");
+        actions.Controls.AddRange(new Control[] { start, stop, reject, probe, desktopBenchmark });
+        var hint = Detail("停止或阻断后，专用通道不可用");
         hint.AutoSize = true;
         hint.Margin = new Padding(9, 12, 0, 0);
         actions.Controls.Add(hint);
@@ -219,7 +221,7 @@ public sealed class MainForm : Form
         importHint.Dock = DockStyle.Fill;
         side.Controls.Add(importHint, 0, 8);
         side.Controls.Add(SectionTitle("连接规则"), 0, 10);
-        var behavior = Detail("仅批准节点 · 默认 REJECT\n不自动回退\n\n关闭窗口保留托盘运行");
+        var behavior = Detail("仅批准节点 · 默认 REJECT\n定时切换默认关闭\n\n关闭窗口保留托盘运行");
         behavior.Dock = DockStyle.Fill;
         side.Controls.Add(behavior, 0, 11);
         body.Controls.Add(side, 1, 0);
@@ -236,6 +238,7 @@ public sealed class MainForm : Form
     {
         var menu = new ContextMenuStrip();
         menu.Items.Add("打开 ClaudeSafe", null, (_, _) => RestoreWindow());
+        menu.Items.Add("Desktop 测速 / 定时", null, (_, _) => OpenBenchmarkWindow());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("停止内核并退出", null, async (_, _) =>
         {
@@ -270,6 +273,7 @@ public sealed class MainForm : Form
 
     private void WireActions()
     {
+        desktopBenchmark.Click += (_, _) => OpenBenchmarkWindow();
         start.Click += async (_, _) => await RunAsync("正在启动专用内核…", async () => { ClearProbe(); await manager.StartAsync(); SetStatus("专用内核已启动。", false); });
         stop.Click += async (_, _) => await RunAsync("正在停止专用内核…", async () => { ClearProbe(); await manager.StopAsync(); SetStatus("专用内核已停止。", false); });
         reject.Click += async (_, _) => await RunAsync("正在阻断专用通道…", async () => { await manager.SelectAsync("REJECT"); ClearProbe(); SetStatus("已切换 REJECT，专用通道拒绝连接。", false); });
@@ -361,7 +365,8 @@ public sealed class MainForm : Form
                 oldFont.Dispose();
             }
             selectedValue.ForeColor = state.Selected == "REJECT" ? Red : Ink;
-            selectedDetail.Text = state.Selected == "REJECT" ? "专用通道当前拒绝连接" : "手动批准节点 · 不自动回退";
+            selectedDetail.Text = state.Selected == "REJECT" ? "专用通道当前拒绝连接"
+                : state.AutoSwitchEnabled ? "批准节点 · 定时失败后可自动切换" : "批准节点 · 自动切换未启用";
             if (selectedNode != state.Selected) ClearProbe();
             selectedNode = state.Selected;
             if (savedInterface != state.InterfaceName || interfaces.SelectedItem == null)
@@ -447,6 +452,23 @@ public sealed class MainForm : Form
         Activate();
     }
 
+    private void OpenBenchmarkWindow()
+    {
+        if (exiting) return;
+        if (benchmarkWindow == null || benchmarkWindow.IsDisposed)
+        {
+            benchmarkWindow = new DesktopBenchmarkForm(manager);
+            benchmarkWindow.FormClosed += (_, _) => benchmarkWindow = null;
+            benchmarkWindow.Show(this);
+        }
+        else
+        {
+            benchmarkWindow.Show();
+            benchmarkWindow.WindowState = FormWindowState.Normal;
+            benchmarkWindow.Activate();
+        }
+    }
+
     private static Label Value(string text) => new() { Text = text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true, Font = new Font("Microsoft YaHei UI", 15F, FontStyle.Bold), ForeColor = Ink, Margin = Padding.Empty };
     private static Label Detail(string text) => new() { Text = text, Font = new Font("Microsoft YaHei UI", 8.5F), ForeColor = Muted, Margin = Padding.Empty };
     private static Label SectionTitle(string text) => new() { Text = text, Dock = DockStyle.Fill, Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold), ForeColor = Ink, Margin = Padding.Empty };
@@ -478,6 +500,7 @@ public sealed class MainForm : Form
     {
         if (disposing)
         {
+            benchmarkWindow?.Dispose();
             refreshTimer.Dispose();
             tray.Visible = false;
             tray.Dispose();

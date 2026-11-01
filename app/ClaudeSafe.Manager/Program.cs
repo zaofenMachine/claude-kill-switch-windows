@@ -15,10 +15,12 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         var data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClaudeSafe", "Manager");
         string? screenshot = null;
+        string? benchmarkScreenshot = null;
         for (var i = 0; i < args.Length; i++)
         {
             if (args[i] == "--data" && i + 1 < args.Length) data = args[++i];
             else if (args[i] == "--screenshot" && i + 1 < args.Length) screenshot = args[++i];
+            else if (args[i] == "--benchmark-screenshot" && i + 1 < args.Length) benchmarkScreenshot = args[++i];
         }
 
         try
@@ -32,6 +34,22 @@ internal static class Program
                 return;
             }
             using var manager = new ManagerService(data);
+            if (benchmarkScreenshot is not null)
+            {
+                using var preview = new DesktopBenchmarkForm(manager);
+                var file = Path.GetFullPath(benchmarkScreenshot);
+                preview.Shown += async (_, _) =>
+                {
+                    await Task.Delay(1000);
+                    using var bitmap = new System.Drawing.Bitmap(preview.Width, preview.Height);
+                    preview.DrawToBitmap(bitmap, new System.Drawing.Rectangle(0, 0, preview.Width, preview.Height));
+                    Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+                    bitmap.Save(file, System.Drawing.Imaging.ImageFormat.Png);
+                    preview.Close();
+                };
+                Application.Run(preview);
+                return;
+            }
             Application.Run(new MainForm(manager, screenshot));
         }
         catch (Exception)

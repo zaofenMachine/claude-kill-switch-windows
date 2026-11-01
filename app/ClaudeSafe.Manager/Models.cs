@@ -9,6 +9,8 @@ public sealed class ManagerSettings
     public string InterfaceName { get; set; } = "";
     public string ExpectedCountry { get; set; } = "SG";
     public List<NodePin> Pins { get; set; } = [];
+    public BenchmarkPreferences Benchmark { get; set; } = new();
+    public DateTimeOffset? NextBenchmarkUtc { get; set; }
 }
 
 public sealed record NodePin(string Name, string Type, string Server, int Port);
@@ -31,6 +33,7 @@ public sealed class ManagerSnapshot
     public string InterfaceName { get; init; } = "";
     public string Message { get; init; } = "";
     public List<NodeSummary> Nodes { get; init; } = [];
+    public bool AutoSwitchEnabled { get; init; }
 }
 
 public sealed class ProbeResult

@@ -2,6 +2,8 @@
 
 新增 [ClaudeSafe Windows 管理器](docs/standalone-manager.md)：通过独立 Mihomo 内核管理专用通道，提供节点批准、切换、导入、匿名出口检查与托盘。Clash Verge 可继续管理日常系统代理或 TUN；迁移需要先移交专用端口，并保留已有 WFP 与 AppLocker。
 
+已集成 [Desktop 实际资源测速及定时测试](docs/desktop-benchmarks.md)：完整 JS/CSS 下载、双协议逐轮结果和智能排名；默认每 24 小时测试，自动切换默认关闭，启用后只在当前节点未全通过时选择全通过最佳节点。
+
 面向 **Claude Desktop 和独立 Firefox** 的定向断网保护参考实现：让指定程序只能连接本机专用代理；代理不可用时连接失败，而不是尝试直连。
 
 本仓库提供可复用源码、默认拒绝的模板和人工部署步骤，**不是一键安装器**。克隆仓库或只配置 Clash 分组，不会自动建立系统级保护。

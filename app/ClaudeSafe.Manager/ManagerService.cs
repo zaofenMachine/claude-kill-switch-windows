@@ -10,7 +10,7 @@ using System.Text.Json.Nodes;
 
 namespace ClaudeSafe.Manager;
 
-public sealed class ManagerService : IDisposable
+public sealed partial class ManagerService : IDisposable
 {
     private readonly SemaphoreSlim gate = new(1, 1);
     private ManagerSettings settings;
@@ -40,6 +40,7 @@ public sealed class ManagerService : IDisposable
         }
         catch (SafeOperationException) { throw; }
         catch { throw new SafeOperationException("本机数据无法读取。请检查 settings.json 和 source.json；程序不会覆盖损坏的配置。"); }
+        InitializeBenchmarks();
     }
 
     public static List<string> PhysicalInterfaces() => NetworkInterface.GetAllNetworkInterfaces()
@@ -68,7 +69,7 @@ public sealed class ManagerService : IDisposable
             }
             else if (core is not null) { await StopCoreAsync().ConfigureAwait(false); message = "专用内核已退出；当前通道不可用。"; }
             return new ManagerSnapshot { Running = IsRunning, ProcessId = IsRunning ? core!.Id : null, Selected = selected,
-                InterfaceName = settings.InterfaceName, Message = message, Nodes = CoreConfig.Summaries(settings, nodes) };
+                InterfaceName = settings.InterfaceName, Message = message, Nodes = CoreConfig.Summaries(settings, nodes), AutoSwitchEnabled = settings.Benchmark.AutoSwitchEnabled };
         }
         finally { gate.Release(); }
     }
@@ -83,6 +84,7 @@ public sealed class ManagerService : IDisposable
         {
             ThrowIfDisposed();
             if (IsRunning) return;
+            manualRevision++;
             await StopCoreAsync().ConfigureAwait(false);
             RequireInterface();
             var corePath = Path.GetFullPath(settings.CorePath.Length == 0 ? Path.Combine(DataDirectory, "bin", "claude-safe-mihomo.exe") : settings.CorePath);
@@ -145,7 +147,7 @@ public sealed class ManagerService : IDisposable
     public async Task StopAsync()
     {
         await gate.WaitAsync().ConfigureAwait(false);
-        try { ThrowIfDisposed(); await StopCoreAsync().ConfigureAwait(false); message = "专用内核已停止，受保护应用的专用通道不可用。"; }
+        try { ThrowIfDisposed(); manualRevision++; await StopCoreAsync().ConfigureAwait(false); message = "专用内核已停止，受保护应用的专用通道不可用。"; }
         finally { gate.Release(); }
     }
 
@@ -193,6 +195,7 @@ public sealed class ManagerService : IDisposable
             ThrowIfDisposed(); RequireInterface();
             if (name != "REJECT" && !CoreConfig.Summaries(settings, nodes).Any(n => n.Name == name && n.Approved && n.Eligible))
                 throw new SafeOperationException("只能选择身份匹配的已批准节点。");
+            manualRevision++;
             try
             {
                 await ApiAsync(HttpMethod.Put, "proxies/" + Uri.EscapeDataString(CoreConfig.Group), new JsonObject { ["name"] = name }).ConfigureAwait(false);
@@ -238,7 +241,7 @@ public sealed class ManagerService : IDisposable
         await gate.WaitAsync().ConfigureAwait(false);
         try
         {
-            ThrowIfDisposed(); await StopCoreAsync().ConfigureAwait(false);
+            ThrowIfDisposed(); configurationRevision++; await StopCoreAsync().ConfigureAwait(false);
             var wrapper = new JsonObject { ["proxies"] = new JsonArray(candidate.Select(n => n.DeepClone()).ToArray()) };
             AtomicWrite(SourcePath, wrapper.ToJsonString(ManagerJson.Options)); nodes = candidate;
             message = "节点来源已导入，内核保持停止。只有批准身份完全匹配的节点可被选择。";
@@ -257,6 +260,7 @@ public sealed class ManagerService : IDisposable
             var node = nodes.SingleOrDefault(n => CoreConfig.Identity(n).Name == name);
             if (node is null || CoreConfig.IneligibleReason(node).Length != 0 || name == settings.InterfaceName)
                 throw new SafeOperationException("该节点缺失、身份不明确或含不支持的路由/证书设置。");
+            configurationRevision++;
             await StopCoreAsync().ConfigureAwait(false);
             settings.Pins.RemoveAll(p => p.Name == name); settings.Pins.Add(CoreConfig.Identity(node)); SaveSettings();
             message = "该节点身份已批准。内核保持停止，下次启动后仍默认 REJECT。";
@@ -269,7 +273,7 @@ public sealed class ManagerService : IDisposable
     public async Task RevokeAsync(string name)
     {
         await gate.WaitAsync().ConfigureAwait(false);
-        try { ThrowIfDisposed(); await StopCoreAsync().ConfigureAwait(false); settings.Pins.RemoveAll(p => p.Name == name); SaveSettings(); message = "批准已移除，内核保持停止。"; }
+        try { ThrowIfDisposed(); configurationRevision++; await StopCoreAsync().ConfigureAwait(false); settings.Pins.RemoveAll(p => p.Name == name); SaveSettings(); message = "批准已移除，内核保持停止。"; }
         catch (SafeOperationException) { throw; }
         catch { throw new SafeOperationException("记录未能保存，专用内核保持停止。"); }
         finally { gate.Release(); }
@@ -282,6 +286,7 @@ public sealed class ManagerService : IDisposable
         {
             ThrowIfDisposed();
             if (!PhysicalInterfaces().Contains(name, StringComparer.Ordinal)) throw new SafeOperationException("请选择当前可用的真实出站网卡。");
+            configurationRevision++;
             await StopCoreAsync().ConfigureAwait(false); settings.InterfaceName = name; SaveSettings();
             message = "真实出站网卡已保存，内核保持停止。";
         }
@@ -340,14 +345,22 @@ public sealed class ManagerService : IDisposable
         // Shutdown and every backend continuation must be independent of its message pump.
         Task.Run(async () =>
         {
+            benchmarkLifetime.Cancel();
+            Task? activeBenchmark;
             await gate.WaitAsync().ConfigureAwait(false);
             try
             {
                 if (disposed) return;
                 disposed = true;
+                benchmarkRunCancellation?.Cancel();
+                activeBenchmark = benchmarkTask;
                 await StopCoreAsync().ConfigureAwait(false);
             }
             finally { gate.Release(); }
+            if (activeBenchmark is not null)
+                try { await activeBenchmark.WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false); } catch { }
+            if (benchmarkScheduler is not null)
+                try { await benchmarkScheduler.WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false); } catch { }
         }).GetAwaiter().GetResult();
     }
 }
