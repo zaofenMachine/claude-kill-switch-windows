@@ -80,7 +80,7 @@ public sealed class DesktopBenchmarkForm : Form
         header.RowStyles.Add(new RowStyle(SizeType.Absolute, 33));
         header.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         header.Controls.Add(new Label { Text = "Desktop 实际资源测速", Dock = DockStyle.Fill, Font = new Font(Font.FontFamily, 17F, FontStyle.Bold), ForeColor = Color.White, Margin = Padding.Empty }, 0, 0);
-        header.Controls.Add(new Label { Text = "完整下载 JS / CSS + 工作入口  ·  每个目标、协议、轮次全部成功才算全通过", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(184, 205, 229), Margin = Padding.Empty, AutoEllipsis = true }, 0, 1);
+        header.Controls.Add(new Label { Text = "Desktop 实际 JS / CSS + API 连通性  ·  不测试网页首页或登录", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(184, 205, 229), Margin = Padding.Empty, AutoEllipsis = true }, 0, 1);
         page.Controls.Add(header, 0, 0);
 
         var content = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(19, 15, 19, 8), Margin = Padding.Empty };
@@ -94,7 +94,7 @@ public sealed class DesktopBenchmarkForm : Form
 
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty, Padding = new Padding(0, 7, 0, 0) };
         actions.Controls.AddRange([testAll, testCurrent, cancel]);
-        var actionHint = Detail($"3 个固定资源（{DesktopBenchmarkTargets.ObservedDate}）+ 2 个入口；资源 404 / 410 需维护清单。");
+        var actionHint = Detail($"3 个固定资源（{DesktopBenchmarkTargets.ObservedDate}）+ API；不含网页首页。资源 404 / 410 需维护。");
         actionHint.AutoSize = true; actionHint.Margin = new Padding(9, 9, 0, 0);
         actions.Controls.Add(actionHint);
         content.Controls.Add(actions, 0, 1);
@@ -292,6 +292,8 @@ public sealed class DesktopBenchmarkForm : Form
             var last = run.FinishedUtc.HasValue ? $" · 上次完成 {LocalTime(run.FinishedUtc.Value)}" : $" · 开始 {LocalTime(run.StartedUtc)}";
             var protocols = run.Options.Protocol == "both" ? "双协议" : run.Options.Protocol == "h2" ? "HTTP/2" : "HTTP/1.1";
             runLabel.Text = $"{StatusText(run.Status)} · {(run.Trigger == "scheduled" ? "定时" : "手动")} · {run.Completed}/{run.Total} · {run.Options.Rounds}轮/{run.Options.TimeoutSeconds}s/{protocols}{last}";
+            if (run.Targets.Any(DesktopBenchmarkTargets.IsLegacyHomepage))
+                runLabel.Text = "旧方案（含网页首页） · " + runLabel.Text;
             var ratio = run.Total > 0 ? Math.Clamp((double)run.Completed / run.Total, 0, 1) : 0;
             progress.Value = (int)(ratio * progress.Maximum);
             var autoState = snapshot.Preferences.AutoSwitchEnabled ? "开启" : "关闭";

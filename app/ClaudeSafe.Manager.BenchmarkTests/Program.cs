@@ -63,8 +63,8 @@ Check("options reject invalid schedules protocols rounds concurrency and deadlin
     foreach (double hours in new[] { -1, 0, 0.09, 8761, double.NaN, double.PositiveInfinity }) Refuses(() => DesktopBenchmarkTargets.ValidatePreferences(new() { IntervalHours = hours }));
     foreach (var p in new[] { new BenchmarkPreferences { Rounds = 0 }, new() { Rounds = 11 }, new() { TimeoutSeconds = 2 }, new() { TimeoutSeconds = 61 }, new() { Concurrency = 0 }, new() { Concurrency = 5 }, new() { Protocol = "h3" } }) Refuses(() => DesktopBenchmarkTargets.ValidatePreferences(p));
 });
-Check("five targets include the original three assets and two anonymous endpoints", () =>
-{ Assert(targets.Count == 5 && targets.Count(t => t.Kind == "resource") == 3); foreach (var t in targets) _ = DesktopBenchmarkTargets.Validate(t); });
+Check("four Desktop targets include three assets and API without a web homepage request", () =>
+{ Assert(targets.Count == 4 && targets.Count(t => t.Kind == "resource") == 3 && targets.All(t => new Uri(t.Url).Host != "claude.ai")); foreach (var t in targets) _ = DesktopBenchmarkTargets.Validate(t); });
 Check("credential query redirect fragment and unapproved hosts refused", () =>
 {
     var credentialUrl = new UriBuilder("https://claude.ai/") { UserName = "fixture", Password = "fixture" }.Uri.AbsoluteUri;
@@ -79,7 +79,7 @@ Check("asset targets restricted to approved CDN folder and file kind", () =>
 Check("all targets always outrank faster partial nodes", () =>
 {
     var slow = Rank("slow", Samples("slow", times: [900, 900, 900, 900, 900]));
-    var fast = Rank("fast", Samples("fast").Take(4).ToList()); Assert(slow.AllPassed && !fast.AllPassed && DesktopBenchmarkRanker.Compare(slow, fast) < 0);
+    var fast = Rank("fast", Samples("fast").Take(targets.Count - 1).ToList()); Assert(slow.AllPassed && !fast.AllPassed && DesktopBenchmarkRanker.Compare(slow, fast) < 0);
 });
 Check("truncated HTTP200 and byte mismatch fail", () =>
 {
@@ -100,7 +100,7 @@ Check("empty resources and missing TLS verification fail", () =>
 Check("only API root404 is successful reachability", () =>
 {
     var data = Samples("x"); Assert(Rank("x", data).AllPassed);
-    data[3].Http = 404; Assert(!Rank("x", data).AllPassed);
+    data[0].Http = 404; Assert(!Rank("x", data).AllPassed);
     foreach (var code in new[] { 401, 403, 429, 500, 502, 503 }) { data = Samples("x"); data[^1].Http = code; Assert(!Rank("x", data).AllPassed); }
 });
 Check("endpoint302 is anonymous reachability but resource302 fails", () =>
@@ -126,10 +126,10 @@ Check("both protocols and actual negotiation must match", () =>
     data[1].ActualProtocol = "http/1.1"; Assert(!Rank("x", data, protocols: protocols).AllPassed);
 });
 Check("slowest target median precedes overall average", () =>
-{ Assert(DesktopBenchmarkRanker.Compare(Rank("balanced", Samples("balanced", times: [300, 300, 300, 300, 300])), Rank("spike", Samples("spike", times: [50, 50, 50, 50, 400]))) < 0); });
+{ Assert(DesktopBenchmarkRanker.Compare(Rank("balanced", Samples("balanced", times: [300, 300, 300, 300])), Rank("spike", Samples("spike", times: [50, 50, 50, 400]))) < 0); });
 Check("average and slowest single sample break median ties", () =>
 {
-    Assert(DesktopBenchmarkRanker.Compare(Rank("a", Samples("a", times: [100, 100, 100, 100, 400])), Rank("b", Samples("b", times: [300, 300, 300, 300, 400]))) < 0);
+    Assert(DesktopBenchmarkRanker.Compare(Rank("a", Samples("a", times: [100, 100, 100, 400])), Rank("b", Samples("b", times: [300, 300, 300, 400]))) < 0);
     var a = Samples("a", 3); var b = Samples("b", 3); b[0].TotalMs = 900;
     Assert(Rank("a", a, 3).WorstMedianMs == Rank("b", b, 3).WorstMedianMs && DesktopBenchmarkRanker.Compare(Rank("a", a, 3), Rank("b", b, 3)) < 0);
 });
@@ -195,6 +195,38 @@ Check("target manifest may refresh assets but cannot drop or replace required en
         definitions = DesktopBenchmarkTargets.Default(); definitions[3].Url = "https://example.invalid/"; File.WriteAllText(file, JsonSerializer.Serialize(definitions, ManagerJson.Options)); Refuses(() => DesktopBenchmarkTargets.Load(directory));
     }
     finally { if (File.Exists(file)) File.Delete(file); Directory.Delete(directory); }
+});
+void WithManifest(List<BenchmarkTarget> definitions, Action<string> test)
+{
+    string directory = Path.Combine(Path.GetTempPath(), "claudesafe-desktop-plan-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(directory); string file = Path.Combine(directory, "desktop-targets.json");
+    try { File.WriteAllText(file, JsonSerializer.Serialize(definitions, ManagerJson.Options)); test(directory); }
+    finally { if (File.Exists(file)) File.Delete(file); Directory.Delete(directory); }
+}
+BenchmarkTarget LegacyHomepage() => new() { Id = "claude.ai", Label = "Old web homepage", Kind = "endpoint", Url = "https://claude.ai/" };
+Check("legacy five-target overrides retire only the known web homepage", () =>
+{
+    var definitions = DesktopBenchmarkTargets.Default(); definitions[0].Url = "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/updated.js";
+    definitions.Add(LegacyHomepage());
+    WithManifest(definitions, directory =>
+    { var loaded = DesktopBenchmarkTargets.Load(directory); Assert(loaded.Count == 4 && loaded.All(t => !DesktopBenchmarkTargets.IsLegacyHomepage(t)) && loaded[0].Url.EndsWith("/updated.js")); });
+});
+Check("legacy migration cannot replace a required resource with the homepage", () =>
+{
+    var definitions = DesktopBenchmarkTargets.Default(); definitions.RemoveAt(0); definitions.Add(LegacyHomepage());
+    WithManifest(definitions, directory => Refuses(() => DesktopBenchmarkTargets.Load(directory)));
+});
+Check("unknown extras or duplicate legacy homepage entries remain refused", () =>
+{
+    var definitions = DesktopBenchmarkTargets.Default(); var unknown = LegacyHomepage(); unknown.Id = "unknown-home"; definitions.Add(unknown);
+    WithManifest(definitions, directory => Refuses(() => DesktopBenchmarkTargets.Load(directory)));
+    definitions = DesktopBenchmarkTargets.Default(); definitions.Add(LegacyHomepage()); definitions.Add(LegacyHomepage());
+    WithManifest(definitions, directory => Refuses(() => DesktopBenchmarkTargets.Load(directory)));
+});
+Check("resource and API 403 still fail the Desktop-only plan", () =>
+{
+    var data = Samples("x"); data[0].Http = 403; Assert(!Rank("x", data).AllPassed);
+    data = Samples("x"); data[^1].Http = 403; Assert(!Rank("x", data).AllPassed);
 });
 Console.WriteLine($"{passed} desktop benchmark checks passed.");
 

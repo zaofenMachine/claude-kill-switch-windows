@@ -174,6 +174,25 @@ Check("backend import refresh and dispose do not need a UI message pump", () =>
         Directory.Delete(directory);
     }
 });
+Check("explicit update restore decodes only an eligible approved node", () =>
+{
+    var snapshot = new ManagerSnapshot { Nodes = [new NodeSummary { Name = "Fixture 🇸🇬", Approved = true, Eligible = true }] };
+    Assert(ManagerStartupRequest.DecodeApprovedNode(Convert.ToBase64String(Encoding.UTF8.GetBytes("Fixture 🇸🇬")), snapshot) == "Fixture 🇸🇬");
+    Assert(ManagerStartupRequest.DecodeApprovedNode(Convert.ToBase64String(Encoding.UTF8.GetBytes("REJECT")), snapshot) == "REJECT");
+});
+Check("update restore refuses unapproved changed or unknown selections", () =>
+{
+    var snapshot = new ManagerSnapshot { Nodes = [new NodeSummary { Name = "Unapproved", Approved = false, Eligible = true },
+        new NodeSummary { Name = "Changed", Approved = true, Eligible = false }] };
+    foreach (var name in new[] { "Unapproved", "Changed", "Unknown", "DIRECT", "GLOBAL" })
+        Refuses(() => ManagerStartupRequest.DecodeApprovedNode(Convert.ToBase64String(Encoding.UTF8.GetBytes(name)), snapshot));
+});
+Check("update restore refuses malformed oversized and control-character payloads", () =>
+{
+    var snapshot = new ManagerSnapshot();
+    foreach (var encoded in new[] { "%%%", new string('A', 2049), Convert.ToBase64String([255]), Convert.ToBase64String(Encoding.UTF8.GetBytes("REJECT\0")) })
+        Refuses(() => ManagerStartupRequest.DecodeApprovedNode(encoded, snapshot));
+});
 Console.WriteLine($"{passed} offline manager checks passed.");
 
 internal sealed class NoPumpSynchronizationContext : SynchronizationContext

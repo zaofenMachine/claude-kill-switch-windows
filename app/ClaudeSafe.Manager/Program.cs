@@ -16,11 +16,13 @@ internal static class Program
         var data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClaudeSafe", "Manager");
         string? screenshot = null;
         string? benchmarkScreenshot = null;
+        string? restoreNode = null;
         for (var i = 0; i < args.Length; i++)
         {
             if (args[i] == "--data" && i + 1 < args.Length) data = args[++i];
             else if (args[i] == "--screenshot" && i + 1 < args.Length) screenshot = args[++i];
             else if (args[i] == "--benchmark-screenshot" && i + 1 < args.Length) benchmarkScreenshot = args[++i];
+            else if (args[i] == "--restore-node-base64" && i + 1 < args.Length) restoreNode = args[++i];
         }
 
         try
@@ -50,7 +52,17 @@ internal static class Program
                 Application.Run(preview);
                 return;
             }
-            Application.Run(new MainForm(manager, screenshot));
+            var form = new MainForm(manager, screenshot);
+            if (restoreNode is not null)
+            {
+                form.Shown += async (_, _) =>
+                {
+                    try { await ManagerStartupRequest.RestoreAsync(manager, restoreNode); }
+                    catch (SafeOperationException e)
+                    { if (!form.IsDisposed) MessageBox.Show(form, e.Message, "更新后恢复", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+                };
+            }
+            Application.Run(form);
         }
         catch (Exception)
         {
