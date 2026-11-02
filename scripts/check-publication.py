@@ -26,7 +26,7 @@ for name in paths:
         continue
     count += 1
     path = PurePosixPath(name)
-    if any(part in blocked_dirs for part in path.parts) or path.name.lower() in blocked_names or path.suffix.lower() in blocked_suffixes or path.name.startswith('.env') or '.local.' in path.name:
+    if any(part.lower() in blocked_dirs for part in path.parts) or path.name.lower() in blocked_names or path.suffix.lower() in blocked_suffixes or path.name.lower().startswith('.env') or '.local.' in path.name.lower():
         failures.append((name, 'private-or-binary-artifact'))
         continue
     raw = subprocess.check_output(['git', 'show', ':' + name])

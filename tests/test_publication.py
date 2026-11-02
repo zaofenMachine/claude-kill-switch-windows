@@ -30,9 +30,11 @@ class PublicationTests(unittest.TestCase):
                 self.assertIn('private-or-binary-artifact', result.stdout)
 
     def test_benchmark_history_is_private(self):
-        result = self.scan('custom-data/benchmarks/latest.json')
-        self.assertEqual(result.returncode, 1)
-        self.assertIn('private-or-binary-artifact', result.stdout)
+        for name in ('custom-data/benchmarks/latest.json', 'custom-data/Benchmarks/latest.json'):
+            with self.subTest(name=name):
+                result = self.scan(name)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn('private-or-binary-artifact', result.stdout)
 
     def test_source_documentation_can_name_private_files(self):
         result = self.scan('docs/subscriptions.md', 'Keep subscriptions.json and source.json locally.')
