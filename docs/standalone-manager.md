@@ -24,13 +24,15 @@ Mihomo 不随仓库分发。自行从可信来源获取并核验后，放在本�
 }
 ```
 
-`corePath` 为完整路径，`coreSha256` 为该文件的 SHA-256。`interfaceName` 必须是联网的真实物理网卡。批准项只包含节点的 `name/type/server/port`，完整节点凭据另存本机 `source.json`，格式为 `{"proxies":[]}`。可以从界面导入 Mihomo YAML/JSON 或通过 HTTPS 下载；导入只读取叶节点，不执行订阅脚本、不照搬其路由、TUN、管理端口或 provider。新节点必须逐个明确批准。
+`corePath` 为完整路径，`coreSha256` 为该文件的 SHA-256。`interfaceName` 必须是联网的真实物理网卡。批准项只包含节点的 `name/type/server/port`。旧版的本机 `source.json`（格式为 `{"proxies":[]}`）首次升级会迁移为本地配置；此后以私有 `subscriptions.json` 保存的订阅目录、地址和节点缓存为准，不再修改旧文件来更新节点。可以从界面导入 Mihomo YAML/JSON 或添加 HTTPS 订阅；导入只读取叶节点，不执行订阅脚本、不照搬其路由、TUN、管理端口或 provider。新节点必须逐个明确批准。
 
 ```powershell
 .\runtime\manager-app\ClaudeSafe.Manager.exe --data "<本地数据目录>"
 ```
 
 界面可以启动/停止内核、选择已批准节点、立即阻断、检查匿名出口、导入配置及维护批准名单。关闭窗口保留托盘；从托盘退出会停止本工具拥有的内核。每次启动内核先选 REJECT，需要主动选择节点才通网。界面退出或崩溃时，Windows Job 负责结束其内核。
+
+「订阅管理 / 更新」可保存多份订阅，更新所选或全部订阅，再选择使用哪份。新增订阅先保存，不自动替换当前来源或批准节点；正在使用的订阅有节点内容变化时，停止专用内核，审阅后手动启动和选择节点。详见 [订阅管理](subscriptions.md)。
 
 「Desktop 测速 / 定时」提供实际 JS/CSS 下载与 API 匿名连通测试、逐轮结果和智能排名，不测试网页首页或浏览器登录。定时默认 24 小时；定时失败后自动选择全通过最佳节点的功能默认关闭。详见 [测速与自动切换](desktop-benchmarks.md)。
 

@@ -11,6 +11,18 @@ python -m unittest discover -s tests -p 'test_*.py'
 
 ## 每台机器必须完成的无账号检查
 
+独立管理器的默认离线检查另包括以下项目（不会连接真实订阅或账号）：
+
+```powershell
+dotnet run --project app/ClaudeSafe.Manager.Tests -c Release
+dotnet run --project app/ClaudeSafe.Manager.BenchmarkTests -c Release
+dotnet run --project app/ClaudeSafe.Manager.PolicyTests -c Release
+dotnet run --project app/ClaudeSafe.Manager.ScheduleTests -c Release
+dotnet run --project app/ClaudeSafe.Manager.SubscriptionTests -c Release
+```
+
+其中订阅检查覆盖旧来源迁移、下载/解析失败保留缓存、来源切换、身份变化和并发更新；测速检查覆盖首次失败后仅跳过该节点，以及跳过记录不能伪装成全通过。发布检查还会拒绝管理器的订阅目录、设置和测速历史，即使误放到 `private/` 以外。
+
 1. **健康路径**：用出口测试页或 `check-proxy.mjs` 确认专用代理可用、出口符合预期。地区匹配不表示节点信誉已验证。
 2. **路径覆盖**：核对运行中的 Desktop/Firefox 及保护清单中的辅助进程。采样 TCP 连接应指向专用入口；“没有采到连接”不是通过。
 3. **受保护/普通对照**：使用同样编译内容的 ProtectedProbe 和 ControlProbe。只把前者纳入 WFP。先在自己控制的非回环测试接收端验证 ControlProbe 能连接，再验证 ProtectedProbe 被阻断。

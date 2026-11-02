@@ -16,12 +16,14 @@ internal static class Program
         var data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClaudeSafe", "Manager");
         string? screenshot = null;
         string? benchmarkScreenshot = null;
+        string? subscriptionsScreenshot = null;
         string? restoreNode = null;
         for (var i = 0; i < args.Length; i++)
         {
             if (args[i] == "--data" && i + 1 < args.Length) data = args[++i];
             else if (args[i] == "--screenshot" && i + 1 < args.Length) screenshot = args[++i];
             else if (args[i] == "--benchmark-screenshot" && i + 1 < args.Length) benchmarkScreenshot = args[++i];
+            else if (args[i] == "--subscriptions-screenshot" && i + 1 < args.Length) subscriptionsScreenshot = args[++i];
             else if (args[i] == "--restore-node-base64" && i + 1 < args.Length) restoreNode = args[++i];
         }
 
@@ -36,10 +38,12 @@ internal static class Program
                 return;
             }
             using var manager = new ManagerService(data);
-            if (benchmarkScreenshot is not null)
+            if (benchmarkScreenshot is not null || subscriptionsScreenshot is not null)
             {
-                using var preview = new DesktopBenchmarkForm(manager);
-                var file = Path.GetFullPath(benchmarkScreenshot);
+                using Form preview = benchmarkScreenshot is not null
+                    ? new DesktopBenchmarkForm(manager)
+                    : new SubscriptionManagerForm(manager);
+                var file = Path.GetFullPath(benchmarkScreenshot ?? subscriptionsScreenshot!);
                 preview.Shown += async (_, _) =>
                 {
                     await Task.Delay(1000);

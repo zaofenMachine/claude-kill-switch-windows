@@ -22,7 +22,7 @@ jobs:
       - name: Build Windows manager and run offline safety checks
         run: |
           $ErrorActionPreference='Stop'
-          foreach($project in @('app/ClaudeSafe.Manager.Tests','app/ClaudeSafe.Manager.BenchmarkTests','app/ClaudeSafe.Manager.PolicyTests','app/ClaudeSafe.Manager.ScheduleTests')) {
+          foreach($project in @('app/ClaudeSafe.Manager.Tests','app/ClaudeSafe.Manager.BenchmarkTests','app/ClaudeSafe.Manager.PolicyTests','app/ClaudeSafe.Manager.ScheduleTests','app/ClaudeSafe.Manager.SubscriptionTests')) {
             dotnet restore $project --locked-mode
             if($LASTEXITCODE -ne 0){throw ('Restore failed: '+$project)}
             dotnet run --project $project -c Release --no-restore

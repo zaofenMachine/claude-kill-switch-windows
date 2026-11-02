@@ -51,10 +51,23 @@ void FailNode(BenchmarkRun run, string name)
     sample.Complete = false; sample.ResourceValid = false; sample.Status = "incomplete"; sample.Bytes = 40;
     Finish(run);
 }
+void FailFastNode(BenchmarkRun run, string name, int failedSlot = 0)
+{
+    run.Options.StopOnFirstFailure = true;
+    var protocols = DesktopBenchmarkTargets.Protocols(run.Options);
+    var ordered = (from round in Enumerable.Range(1, run.Options.Rounds)
+        from target in run.Targets from protocol in protocols
+        select run.Samples.Single(s => s.Name == name && s.Round == round && s.TargetId == target.Id && s.Protocol == protocol)).ToList();
+    var failure = ordered[failedSlot]; failure.Complete = false; failure.Status = "incomplete"; failure.Bytes = 40;
+    foreach (var sample in ordered.Skip(failedSlot + 1))
+        run.Samples[run.Samples.IndexOf(sample)] = DesktopBenchmarkSamples.CreateSkipped(name,
+            run.Targets.Single(t => t.Id == sample.TargetId), sample.Protocol, sample.Round);
+    Finish(run);
+}
 
 Check("automatic switching defaults off and interval defaults to 24h", () =>
 {
-    var defaults = new BenchmarkPreferences(); Assert(!defaults.AutoSwitchEnabled && defaults.IntervalHours == 24);
+    var defaults = new BenchmarkPreferences(); Assert(!defaults.AutoSwitchEnabled && !defaults.StopOnFirstFailure && defaults.IntervalHours == 24);
 });
 Check("disabled automation preserves current even if it failed", () =>
 {
@@ -218,6 +231,96 @@ Check("invalid benchmark options are refused", () =>
         if (kind == "interval") run.Options.IntervalHours = 0;
         if (kind == "nan") run.Options.IntervalHours = double.NaN;
         if (kind == "protocol") run.Options.Protocol = "unknown";
+        Assert(Decide(run).Action == "keep");
+    }
+});
+Check("valid fail-fast suffixes after an actual failed request permit the best healthy node", () =>
+{
+    foreach (var failedSlot in new[] { 0, 3, 6, 10, 11 })
+    {
+        var run = Run(); FailFastNode(run, "Current", failedSlot);
+        var decision = Decide(run); Assert(decision.Action == "switch" && decision.NodeName == "Best");
+    }
+});
+Check("fail-fast failures for every node request REJECT without treating skips as passes", () =>
+{
+    var run = Run(); FailFastNode(run, "Current", 0); FailFastNode(run, "Best", 2); FailFastNode(run, "Other", 7);
+    var decision = Decide(run); Assert(decision.Action == "reject" && decision.NodeName == "REJECT");
+});
+Check("skipped fastest candidate is never selected even if its cached rank claims success", () =>
+{
+    var run = Run(); FailFastNode(run, "Current"); FailFastNode(run, "Best");
+    run.Ranks.Single(r => r.Name == "Best").AllPassed = true;
+    Assert(Decide(run).Action == "switch" && Decide(run).NodeName == "Other");
+});
+Check("fail-fast enabled still preserves a healthy current node", () =>
+{
+    var run = Run(); run.Options.StopOnFirstFailure = true; FailFastNode(run, "Best");
+    Assert(Decide(run).Action == "keep");
+});
+Check("skips require the enabled preference and an actual preceding failure", () =>
+{
+    var disabled = Run(); FailFastNode(disabled, "Current"); disabled.Options.StopOnFirstFailure = false;
+    Assert(Decide(disabled).Action == "keep");
+    var noFailure = Run(); FailFastNode(noFailure, "Current");
+    var actual = noFailure.Samples.Single(s => s.Name == "Current" && !DesktopBenchmarkSamples.IsSkipped(s));
+    noFailure.Samples[noFailure.Samples.IndexOf(actual)] = DesktopBenchmarkSamples.CreateSkipped(actual.Name,
+        noFailure.Targets.Single(t => t.Id == actual.TargetId), actual.Protocol, actual.Round);
+    Finish(noFailure); Assert(Decide(noFailure).Action == "keep");
+    var passedPrefix = Run(); FailFastNode(passedPrefix, "Current", 2);
+    actual = passedPrefix.Samples.First(s => s.Name == "Current" && !s.Complete && !DesktopBenchmarkSamples.IsSkipped(s));
+    actual.Complete = true; actual.Bytes = 100; actual.Status = "ok";
+    Finish(passedPrefix); Assert(Decide(passedPrefix).Action == "keep");
+});
+Check("missing duplicate and interrupted skip suffixes cannot drive an automatic action", () =>
+{
+    foreach (var invalid in new[] { "missing", "duplicate", "attempt-after-failure" })
+    {
+        var run = Run(); FailFastNode(run, "Current");
+        var skips = run.Samples.Where(s => s.Name == "Current" && DesktopBenchmarkSamples.IsSkipped(s)).ToList();
+        if (invalid == "missing") run.Samples.Remove(skips[0]);
+        if (invalid == "duplicate") run.Samples[run.Samples.IndexOf(skips[0])] = skips[1];
+        if (invalid == "attempt-after-failure")
+        {
+            var sample = skips[0]; sample.Status = "network_error"; sample.Error = "真实请求失败。";
+        }
+        Finish(run); Assert(Decide(run).Action == "keep");
+    }
+});
+Check("skipped records cannot carry response evidence or altered status semantics", () =>
+{
+    foreach (var field in new[] { "http", "complete", "tls", "resource", "bytes", "expected", "ttfb", "total", "actual-protocol", "type", "status", "reason" })
+    {
+        var run = Run(); FailFastNode(run, "Current"); var sample = run.Samples.First(DesktopBenchmarkSamples.IsSkipped);
+        if (field == "http") sample.Http = 200;
+        if (field == "complete") sample.Complete = true;
+        if (field == "tls") sample.TlsVerified = true;
+        if (field == "resource") sample.ResourceValid = true;
+        if (field == "bytes") sample.Bytes = 100;
+        if (field == "expected") sample.ExpectedBytes = 0;
+        if (field == "ttfb") sample.TtfbMs = 0;
+        if (field == "total") sample.TotalMs = 1;
+        if (field == "actual-protocol") sample.ActualProtocol = sample.Protocol;
+        if (field == "type") sample.ContentType = "text/javascript";
+        if (field == "status") sample.Status = "Skipped";
+        if (field == "reason") sample.Error = "";
+        Assert(Decide(run).Action == "keep");
+    }
+});
+Check("an enabled run with attempted slots after its first failure is incompatible evidence", () =>
+{
+    var run = Run(); FailNode(run, "Current"); run.Options.StopOnFirstFailure = true;
+    Assert(Decide(run).Action == "keep");
+});
+Check("fail-fast cancellation or manual invocation never applies a valid skip matrix", () =>
+{
+    foreach (var invalid in new[] { "manual", "cancelled", "error", "cancelled-sample" })
+    {
+        var run = Run(); FailFastNode(run, "Current");
+        if (invalid == "manual") run.Trigger = "manual";
+        if (invalid == "cancelled") run.Cancelled = true;
+        if (invalid == "error") run.Status = "error";
+        if (invalid == "cancelled-sample") run.Samples.First(s => s.Name == "Current" && !DesktopBenchmarkSamples.IsSkipped(s)).Status = "cancelled";
         Assert(Decide(run).Action == "keep");
     }
 });

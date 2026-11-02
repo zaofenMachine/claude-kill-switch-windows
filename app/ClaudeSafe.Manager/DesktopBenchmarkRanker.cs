@@ -6,7 +6,7 @@ public static class DesktopBenchmarkRanker
 {
     public static bool IsPassing(BenchmarkSample sample, BenchmarkTarget target)
     {
-        if (!sample.Complete || !sample.TlsVerified || !double.IsFinite(sample.TotalMs) || sample.TotalMs < 0 || sample.Bytes < 0 ||
+        if (DesktopBenchmarkSamples.IsSkipped(sample) || !sample.Complete || !sample.TlsVerified || !double.IsFinite(sample.TotalMs) || sample.TotalMs < 0 || sample.Bytes < 0 ||
             sample.ExpectedBytes is < 0 || (sample.ExpectedBytes is long length && length != sample.Bytes) ||
             sample.ActualProtocol.Length > 0 && sample.ActualProtocol != sample.Protocol)
             return false;
@@ -37,7 +37,8 @@ public static class DesktopBenchmarkRanker
             for (int round = 1; round <= rounds; round++)
             {
                 var slot = group.Where(s => s.Round == round).ToArray();
-                if (slot.Length > 0) result.CoveredSlots++;
+                if (slot.Any(s => !DesktopBenchmarkSamples.IsSkipped(s))) result.CoveredSlots++;
+                if (slot.Length == 1 && DesktopBenchmarkSamples.IsSkipped(slot[0])) result.SkippedSlots++;
                 if (slot.Length == 1 && IsPassing(slot[0], target))
                 {
                     result.PassedSlots++; columnTimes.Add(slot[0].TotalMs); times.Add(slot[0].TotalMs);

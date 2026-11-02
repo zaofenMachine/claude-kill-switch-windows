@@ -8,7 +8,8 @@ import subprocess
 import sys
 
 paths = subprocess.check_output(['git', 'ls-files', '-z']).decode('utf-8').split('\0')
-blocked_dirs = {'private', 'runtime', 'reports', 'backups', 'downloads', 'research', '.deps', 'node_modules', '__pycache__'}
+blocked_dirs = {'private', 'runtime', 'reports', 'backups', 'downloads', 'research', '.deps', 'node_modules', '__pycache__', 'benchmarks'}
+blocked_names = {'subscriptions.json', 'settings.json', 'source.json', 'desktop-targets.json'}
 blocked_suffixes = {'.exe', '.dll', '.zip', '.7z', '.msix', '.msixbundle', '.pfx', '.p12', '.pem', '.key', '.db', '.sqlite', '.png', '.jpg', '.log'}
 patterns = {
     'personal-windows-path': re.compile(r'[A-Za-z]:[\\/]+Users[\\/]+', re.I),
@@ -25,7 +26,7 @@ for name in paths:
         continue
     count += 1
     path = PurePosixPath(name)
-    if any(part in blocked_dirs for part in path.parts) or path.suffix.lower() in blocked_suffixes or path.name.startswith('.env') or '.local.' in path.name:
+    if any(part in blocked_dirs for part in path.parts) or path.name.lower() in blocked_names or path.suffix.lower() in blocked_suffixes or path.name.startswith('.env') or '.local.' in path.name:
         failures.append((name, 'private-or-binary-artifact'))
         continue
     raw = subprocess.check_output(['git', 'show', ':' + name])

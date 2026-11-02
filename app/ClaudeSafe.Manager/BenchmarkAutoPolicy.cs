@@ -106,15 +106,41 @@ public static class BenchmarkAutoPolicy
 
         var names = run.NodeNames.ToHashSet(StringComparer.Ordinal);
         var targetIds = run.Targets.Select(t => t.Id).ToHashSet(StringComparer.Ordinal);
-        var slots = new HashSet<(string Name, string Target, string Protocol, int Round)>();
+        var slots = new Dictionary<(string Name, string Target, string Protocol, int Round), BenchmarkSample>();
         foreach (var sample in run.Samples)
         {
             if (sample is null || !names.Contains(sample.Name) || !targetIds.Contains(sample.TargetId) ||
                 !protocols.Contains(sample.Protocol, StringComparer.Ordinal) ||
                 sample.Round < 1 || sample.Round > run.Options.Rounds ||
-                !slots.Add((sample.Name, sample.TargetId, sample.Protocol, sample.Round)))
+                !slots.TryAdd((sample.Name, sample.TargetId, sample.Protocol, sample.Round), sample))
                 return false;
         }
-        return slots.Count == expected;
+        if (slots.Count != expected) return false;
+
+        // Fail-fast resolves the full plan with explicit skipped records. They are valid only
+        // as an exact suffix after this node's first actual failed request in runner order.
+        // A missing request, a skipped healthy node, or an attempted slot after that failure
+        // is incompatible evidence and cannot drive an automatic action.
+        foreach (var name in run.NodeNames)
+        {
+            bool failureSeen = false;
+            for (int round = 1; round <= run.Options.Rounds; round++)
+            foreach (var target in run.Targets)
+            foreach (var protocol in protocols)
+            {
+                var sample = slots[(name, target.Id, protocol, round)];
+                if (DesktopBenchmarkSamples.IsSkipped(sample))
+                {
+                    if (!run.Options.StopOnFirstFailure || !failureSeen || !DesktopBenchmarkSamples.IsCanonicalSkipped(sample))
+                        return false;
+                }
+                else
+                {
+                    if (sample.Status == "cancelled" || run.Options.StopOnFirstFailure && failureSeen) return false;
+                    if (!DesktopBenchmarkRanker.IsPassing(sample, target)) failureSeen = true;
+                }
+            }
+        }
+        return true;
     }
 }

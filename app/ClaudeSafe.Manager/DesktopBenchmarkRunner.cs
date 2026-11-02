@@ -114,22 +114,25 @@ public sealed class DesktopBenchmarkRunner
                 await parallel.WaitAsync(cancel).ConfigureAwait(false);
                 try
                 {
-                    for (int round = 1; round <= options.Rounds; round++)
-                    foreach (var target in run.Targets)
-                    foreach (var protocol in protocols)
+                    await RunNodeSamplesAsync(name, run.Targets, options, async (target, protocol, round, token) =>
                     {
-                        cancel.ThrowIfCancellationRequested();
                         if (core.HasExited || !BenchmarkPortOwnership.ExactlyOwnedBy(core.Id, ports.Values))
                             throw new SafeOperationException("临时测速内核或监听已退出；不会改用生产通道。");
-                        var sample = await DesktopBenchmarkHttpProbe.ProbeAsync(name, ports[name], target, protocol, round, options.TimeoutSeconds, cancel).ConfigureAwait(false);
+                        return await DesktopBenchmarkHttpProbe.ProbeAsync(name, ports[name], target, protocol, round, options.TimeoutSeconds, token).ConfigureAwait(false);
+                    }, sample =>
+                    {
                         lock (sync) { run.Samples.Add(sample); run.Completed = run.Samples.Count; UpdateRanks(); }
                         Report();
-                        cancel.ThrowIfCancellationRequested();
-                    }
+                    }, cancel).ConfigureAwait(false);
                 }
                 finally { parallel.Release(); }
             })).ConfigureAwait(false);
-            lock (sync) { run.Status = "completed"; run.Message = "测速完成。全通过要求每个目标、协议和轮次都恰好有一个通过样本。"; }
+            lock (sync)
+            {
+                run.Status = "completed";
+                run.Message = (run.Skipped > 0 ? $"测速完成：实际请求 {run.Attempted} 项，跳过 {run.Skipped} 项。" : "测速完成。") +
+                    "全通过要求每个目标、协议和轮次都恰好有一个通过样本，跳过不算通过。";
+            }
         }
         catch (OperationCanceledException)
         {
@@ -157,6 +160,31 @@ public sealed class DesktopBenchmarkRunner
             Report();
         }
         lock (sync) return DesktopBenchmarkCopies.Clone(run);
+    }
+
+    // Shared scheduling path for real probes and offline execution checks. A failure is local
+    // to this node; the caller owns concurrency across nodes and the proxy used by each probe.
+    public static async Task RunNodeSamplesAsync(string name, IReadOnlyList<BenchmarkTarget> targets,
+        BenchmarkPreferences options, Func<BenchmarkTarget, string, int, CancellationToken, Task<BenchmarkSample>> probe,
+        Action<BenchmarkSample> record, CancellationToken cancel)
+    {
+        options = DesktopBenchmarkCopies.Clone(options);
+        DesktopBenchmarkTargets.ValidatePreferences(options);
+        var protocols = DesktopBenchmarkTargets.Protocols(options);
+        bool failed = false;
+        for (int round = 1; round <= options.Rounds; round++)
+        foreach (var target in targets)
+        foreach (var protocol in protocols)
+        {
+            cancel.ThrowIfCancellationRequested();
+            var sample = failed ? DesktopBenchmarkSamples.CreateSkipped(name, target, protocol, round)
+                : await probe(target, protocol, round, cancel).ConfigureAwait(false);
+            if (sample.Name != name || sample.TargetId != target.Id || sample.Protocol != protocol || sample.Round != round)
+                throw new SafeOperationException("测速样本与计划项不匹配，已停止任务。");
+            record(sample);
+            cancel.ThrowIfCancellationRequested();
+            if (options.StopOnFirstFailure && !DesktopBenchmarkRanker.IsPassing(sample, target)) failed = true;
+        }
     }
 
     public static JsonObject BuildIsolatedConfiguration(ManagerSettings settings, IReadOnlyList<JsonObject> nodes, IReadOnlyDictionary<string, int> ports)

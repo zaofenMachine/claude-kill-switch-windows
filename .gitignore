@@ -30,6 +30,12 @@
 __pycache__/
 *.pyc
 node_modules/
+# A --data directory may be outside runtime/private. These manager files are always local.
+subscriptions.json
+settings.json
+source.json
+desktop-targets.json
+benchmarks/
 .DS_Store
 Thumbs.db
 bin/

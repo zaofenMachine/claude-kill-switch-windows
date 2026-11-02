@@ -18,12 +18,13 @@ if (args.Length > 1 && args[0] == "--live")
             case "--protocol": options.Protocol = args[++i]; break;
             case "--timeout": options.TimeoutSeconds = int.Parse(args[++i]); break;
             case "--concurrency": options.Concurrency = int.Parse(args[++i]); break;
+            case "--stop-on-first-failure": options.StopOnFirstFailure = true; break;
             case "--output": output = args[++i]; break;
             default: throw new ArgumentException("Unknown live test argument.");
         }
     }
     var settings = JsonSerializer.Deserialize<ManagerSettings>(File.ReadAllText(Path.Combine(directory, "settings.json")), ManagerJson.Options)!;
-    var nodes = CoreConfig.ParseSource(File.ReadAllText(Path.Combine(directory, "source.json")));
+    var nodes = SubscriptionSourceReader.LoadActiveNodes(directory);
     using var cancel = new CancellationTokenSource();
     Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancel.Cancel(); };
     var progress = new InlineProgress(run => Console.WriteLine(JsonSerializer.Serialize(new { @event = "progress", run.Status, run.Completed, run.Total, run.Message })));
@@ -32,7 +33,7 @@ if (args.Length > 1 && args[0] == "--live")
     Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
     await File.WriteAllTextAsync(output, JsonSerializer.Serialize(result, ManagerJson.Options), new UTF8Encoding(false));
     Console.WriteLine(JsonSerializer.Serialize(new { @event = "finished", result.Status, result.Completed, result.Total,
-        AllPassedNodes = result.Ranks.Count(r => r.AllPassed), Report = output, result.Message }));
+        result.Attempted, result.Skipped, AllPassedNodes = result.Ranks.Count(r => r.AllPassed), Report = output, result.Message }));
     Environment.ExitCode = result.Status == "completed" ? 0 : 1; return;
 }
 
@@ -55,9 +56,101 @@ List<BenchmarkSample> Samples(string name, int rounds = 1, string[]? protocols =
 BenchmarkRank Rank(string name, List<BenchmarkSample> samples, int rounds = 1, string[]? protocols = null) => DesktopBenchmarkRanker.Rank(name, targets, protocols ?? ["http/1.1"], rounds, samples);
 JsonObject Leaf(string name = "Fixture", string server = "example.invalid") => new() { ["name"] = name, ["type"] = "vless", ["server"] = server, ["port"] = 443, ["uuid"] = "fixture-private-value", ["tls"] = true };
 ManagerSettings Settings() => new() { InterfaceName = "Fixture Ethernet", Pins = [new("Fixture", "vless", "example.invalid", 443)] };
+BenchmarkSample PassingSample(string name, BenchmarkTarget target, string protocol, int round) => new()
+{
+    Name = name, TargetId = target.Id, Protocol = protocol, ActualProtocol = protocol, Round = round,
+    Http = target.Url == "https://api.anthropic.com/" ? 404 : 200, Complete = true, TlsVerified = true,
+    ResourceValid = target.Kind == "resource", ContentType = target.ExpectedType,
+    Bytes = 100, ExpectedBytes = 100, TtfbMs = 10, TotalMs = 20, Status = "ok"
+};
 
 Check("defaults are 24h scheduled with automatic switching disabled", () =>
 { var p = new BenchmarkPreferences(); Assert(p.ScheduleEnabled && p.IntervalHours == 24 && !p.AutoSwitchEnabled); DesktopBenchmarkTargets.ValidatePreferences(p); });
+Check("stop on first failure defaults off and persists without changing old preferences", () =>
+{
+    Assert(!new BenchmarkPreferences().StopOnFirstFailure);
+    var old = JsonSerializer.Deserialize<BenchmarkPreferences>("{\"rounds\":2}", ManagerJson.Options)!;
+    Assert(!old.StopOnFirstFailure && old.Rounds == 2);
+    var enabled = DesktopBenchmarkCopies.Clone(new BenchmarkPreferences { StopOnFirstFailure = true });
+    Assert(enabled.StopOnFirstFailure && JsonSerializer.Serialize(old, ManagerJson.Options) != JsonSerializer.Serialize(enabled, ManagerJson.Options));
+});
+Check("default node execution continues across protocols targets and rounds after a failure", () =>
+{
+    var options = new BenchmarkPreferences { Rounds = 2, Protocol = "both" }; int calls = 0;
+    var data = new List<BenchmarkSample>();
+    DesktopBenchmarkRunner.RunNodeSamplesAsync("x", targets, options, (target, protocol, round, _) =>
+    {
+        var sample = PassingSample("x", target, protocol, round);
+        if (++calls == 1) { sample.Complete = false; sample.Status = "timeout"; }
+        return Task.FromResult(sample);
+    }, data.Add, CancellationToken.None).GetAwaiter().GetResult();
+    Assert(calls == targets.Count * 2 * 2 && data.Count == calls && data.All(s => !DesktopBenchmarkSamples.IsSkipped(s)));
+    Assert(data[^1].Round == 2 && data[^1].TargetId == targets[^1].Id && data[^1].Protocol == "h2");
+});
+Check("enabled fail-fast skips every remaining slot for only the failed node", () =>
+{
+    var options = new BenchmarkPreferences { StopOnFirstFailure = true, Rounds = 3, Protocol = "both" };
+    var bad = new List<BenchmarkSample>(); var good = new List<BenchmarkSample>(); int badCalls = 0, goodCalls = 0;
+    var badTask = DesktopBenchmarkRunner.RunNodeSamplesAsync("bad", targets, options, (target, protocol, round, _) =>
+    {
+        var sample = PassingSample("bad", target, protocol, round);
+        if (++badCalls == 3) { sample.Bytes = 40; sample.Status = "incomplete"; }
+        return Task.FromResult(sample);
+    }, bad.Add, CancellationToken.None);
+    var goodTask = DesktopBenchmarkRunner.RunNodeSamplesAsync("good", targets, options, (target, protocol, round, _) =>
+    { goodCalls++; return Task.FromResult(PassingSample("good", target, protocol, round)); }, good.Add, CancellationToken.None);
+    Task.WhenAll(badTask, goodTask).GetAwaiter().GetResult();
+    int total = targets.Count * 2 * 3;
+    Assert(badCalls == 3 && goodCalls == total && bad.Count == total && good.Count == total);
+    Assert(bad.Take(3).All(s => !DesktopBenchmarkSamples.IsSkipped(s)) && bad.Skip(3).All(DesktopBenchmarkSamples.IsCanonicalSkipped));
+    Assert(bad[3].Round == 1 && bad[3].TargetId == targets[1].Id && bad[3].Protocol == "h2" && bad[^1].Round == 3);
+    var badRank = Rank("bad", bad, 3, ["http/1.1", "h2"]);
+    Assert(!badRank.AllPassed && badRank.CoveredSlots == 3 && badRank.SkippedSlots == total - 3 && badRank.PassedSlots == 2);
+    Assert(Rank("good", good, 3, ["http/1.1", "h2"]).AllPassed);
+    var run = DesktopBenchmarkCopies.Clone(new BenchmarkRun { Samples = bad.Concat(good).ToList() });
+    Assert(run.Attempted == total + 3 && run.Skipped == total - 3);
+});
+Check("a last-slot failure finishes without manufacturing skipped or passing records", () =>
+{
+    var options = new BenchmarkPreferences { StopOnFirstFailure = true, Rounds = 1, Protocol = "h2" };
+    var data = new List<BenchmarkSample>(); int calls = 0;
+    DesktopBenchmarkRunner.RunNodeSamplesAsync("x", targets, options, (target, protocol, round, _) =>
+    {
+        var sample = PassingSample("x", target, protocol, round);
+        if (++calls == targets.Count) { sample.Http = 403; sample.Status = "restricted"; }
+        return Task.FromResult(sample);
+    }, data.Add, CancellationToken.None).GetAwaiter().GetResult();
+    Assert(data.Count == targets.Count && data.All(s => !DesktopBenchmarkSamples.IsSkipped(s)) && !Rank("x", data, protocols: ["h2"]).AllPassed);
+});
+Check("cancellation after failure does not resolve unattempted slots as skipped", () =>
+{
+    using var cancel = new CancellationTokenSource(); var data = new List<BenchmarkSample>(); int calls = 0;
+    try
+    {
+        DesktopBenchmarkRunner.RunNodeSamplesAsync("x", targets, new() { StopOnFirstFailure = true }, (target, protocol, round, _) =>
+        {
+            calls++; var sample = PassingSample("x", target, protocol, round); sample.Complete = false;
+            return Task.FromResult(sample);
+        }, sample => { data.Add(sample); cancel.Cancel(); }, cancel.Token).GetAwaiter().GetResult();
+        throw new Exception();
+    }
+    catch (OperationCanceledException) { }
+    Assert(calls == 1 && data.Count == 1 && data.All(s => !DesktopBenchmarkSamples.IsSkipped(s)));
+});
+Check("an in-flight preference edit cannot disable this node's frozen fail-fast plan", () =>
+{
+    var options = new BenchmarkPreferences { StopOnFirstFailure = true, Rounds = 1, Protocol = "h2" }; var data = new List<BenchmarkSample>(); int calls = 0;
+    DesktopBenchmarkRunner.RunNodeSamplesAsync("x", targets, options, (target, protocol, round, _) =>
+    { calls++; var sample = PassingSample("x", target, protocol, round); sample.TlsVerified = false; return Task.FromResult(sample); },
+        sample => { data.Add(sample); options.StopOnFirstFailure = false; }, CancellationToken.None).GetAwaiter().GetResult();
+    Assert(calls == 1 && data.Skip(1).All(DesktopBenchmarkSamples.IsCanonicalSkipped));
+});
+Check("skipped samples can never pass even with fabricated response fields", () =>
+{
+    var sample = PassingSample("x", targets[0], "h2", 1); sample.Status = "skipped";
+    Assert(!DesktopBenchmarkRanker.IsPassing(sample, targets[0]) && !DesktopBenchmarkSamples.IsCanonicalSkipped(sample));
+    sample.Status = "Skipped"; Assert(!DesktopBenchmarkRanker.IsPassing(sample, targets[0]));
+});
 Check("options reject invalid schedules protocols rounds concurrency and deadlines", () =>
 {
     foreach (double hours in new[] { -1, 0, 0.09, 8761, double.NaN, double.PositiveInfinity }) Refuses(() => DesktopBenchmarkTargets.ValidatePreferences(new() { IntervalHours = hours }));

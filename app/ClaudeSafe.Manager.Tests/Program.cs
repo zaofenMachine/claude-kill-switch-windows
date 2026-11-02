@@ -168,8 +168,8 @@ Check("backend import refresh and dispose do not need a UI message pump", () =>
     try { Assert(SyncDisposeCheck.Run(directory, startCore: false, fixture).Passed); }
     finally
     {
-        // Delete only the three explicitly owned files, then the now-empty fixture directory.
-        foreach (var name in new[] { "fixture.json", "source.json", "settings.json" })
+        // Delete only explicitly owned files, then the now-empty fixture directory.
+        foreach (var name in new[] { "fixture.json", "source.json", "settings.json", "subscriptions.json" })
         { var file = Path.Combine(directory, name); if (File.Exists(file)) File.Delete(file); }
         Directory.Delete(directory);
     }

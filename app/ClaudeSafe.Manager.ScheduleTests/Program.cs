@@ -178,7 +178,7 @@ void Clean(string dir)
 {
     if (!Path.GetFullPath(dir).StartsWith(Path.GetFullPath(Path.GetTempPath()), StringComparison.OrdinalIgnoreCase) ||
         !Path.GetFileName(dir).StartsWith("claudesafe-schedule-fixture-", StringComparison.Ordinal)) throw new Exception();
-    foreach (var name in new[] { "settings.json", "source.json" }) { var path = Path.Combine(dir, name); if (File.Exists(path)) File.Delete(path); }
+    foreach (var name in new[] { "settings.json", "source.json", "subscriptions.json" }) { var path = Path.Combine(dir, name); if (File.Exists(path)) File.Delete(path); }
     Directory.Delete(dir);
 }
 Check("first use persists a future due date without starting or testing immediately", () =>
@@ -233,6 +233,27 @@ Check("parameter edit without an interval change keeps the due date", () =>
         before.Preferences.Rounds = 1;
         manager.SaveBenchmarkPreferencesAsync(before.Preferences).GetAwaiter().GetResult();
         Assert(manager.BenchmarkSnapshotAsync().GetAwaiter().GetResult().NextDueUtc == before.NextDueUtc);
+    }
+    finally { Clean(dir); }
+});
+Check("fail-fast preference defaults off and persists without resetting the schedule", () =>
+{
+    var dir = Fixture(); DateTimeOffset? saved;
+    try
+    {
+        using (var manager = new ManagerService(dir))
+        {
+            var before = manager.BenchmarkSnapshotAsync().GetAwaiter().GetResult();
+            Assert(!before.Preferences.StopOnFirstFailure);
+            saved = before.NextDueUtc;
+            before.Preferences.StopOnFirstFailure = true;
+            manager.SaveBenchmarkPreferencesAsync(before.Preferences).GetAwaiter().GetResult();
+            var after = manager.BenchmarkSnapshotAsync().GetAwaiter().GetResult();
+            Assert(after.Preferences.StopOnFirstFailure && after.NextDueUtc == saved && !after.Preferences.AutoSwitchEnabled);
+        }
+        using var reopened = new ManagerService(dir);
+        var restored = reopened.BenchmarkSnapshotAsync().GetAwaiter().GetResult();
+        Assert(restored.Preferences.StopOnFirstFailure && restored.NextDueUtc == saved);
     }
     finally { Clean(dir); }
 });

@@ -23,12 +23,14 @@ public sealed class DesktopBenchmarkForm : Form
     private readonly ComboBox protocol = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 122 };
     private readonly CheckBox schedule = new() { Text = "定时测试", Checked = true, AutoSize = true };
     private readonly CheckBox autoSwitch = new() { Text = "当前节点不全过时，自动切换最佳节点", Checked = false, AutoSize = true };
+    private readonly CheckBox stopOnFirstFailure = new() { Text = "节点首次失败后跳过后续测试（默认关闭）", Checked = false, AutoSize = true };
     private readonly Button save = ActionButton("保存设置", true);
     private readonly Button testAll = ActionButton("测速全部批准节点", true, 155);
     private readonly Button testCurrent = ActionButton("仅测当前节点", false, 135);
     private readonly Button cancel = ActionButton("取消本次测速", false, 135);
     private readonly Label dirtyLabel = Detail("正在读取设置…");
     private readonly Label runLabel = Detail("尚无测速记录");
+    private readonly Label runOptionsLabel = Detail("记录参数：尚无测速记录");
     private readonly Label scheduleLabel = Detail("正在读取定时状态…");
     private readonly Label autoLabel = Detail("自动切换默认关闭");
     private readonly Label notice = Detail("测速使用独立通道，不修改当前节点；手动测速不会自动切换。");
@@ -52,8 +54,8 @@ public sealed class DesktopBenchmarkForm : Form
     {
         this.manager = manager;
         Text = "ClaudeSafe · Desktop 测速与定时";
-        ClientSize = new Size(1220, 850);
-        MinimumSize = new Size(1080, 760);
+        ClientSize = new Size(1220, 880);
+        MinimumSize = new Size(1080, 790);
         StartPosition = FormStartPosition.CenterParent;
         Font = new Font("Microsoft YaHei UI", 9F);
         ForeColor = Ink;
@@ -84,9 +86,9 @@ public sealed class DesktopBenchmarkForm : Form
         page.Controls.Add(header, 0, 0);
 
         var content = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(19, 15, 19, 8), Margin = Padding.Empty };
-        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 143));
+        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 172));
         content.RowStyles.Add(new RowStyle(SizeType.Absolute, 45));
-        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 85));
+        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 109));
         content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         content.RowStyles.Add(new RowStyle(SizeType.Absolute, 27));
         page.Controls.Add(content, 0, 1);
@@ -99,17 +101,19 @@ public sealed class DesktopBenchmarkForm : Form
         actions.Controls.Add(actionHint);
         content.Controls.Add(actions, 0, 1);
 
-        var state = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 2, BackColor = Color.White, Padding = new Padding(11, 7, 11, 6), Margin = new Padding(0, 0, 0, 10) };
-        state.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52));
-        state.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48));
+        var state = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 2, BackColor = Color.White, Padding = new Padding(11, 7, 11, 6), Margin = new Padding(0, 0, 0, 10) };
+        state.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62));
+        state.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38));
+        state.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
         state.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
         state.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
         state.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        foreach (var label in new[] { runLabel, scheduleLabel, autoLabel }) { label.Dock = DockStyle.Fill; label.AutoEllipsis = true; label.TextAlign = ContentAlignment.MiddleLeft; }
+        foreach (var label in new[] { runLabel, runOptionsLabel, scheduleLabel, autoLabel }) { label.Dock = DockStyle.Fill; label.AutoEllipsis = true; label.TextAlign = ContentAlignment.MiddleLeft; }
         runLabel.ForeColor = Ink;
         state.Controls.Add(runLabel, 0, 0); state.Controls.Add(scheduleLabel, 1, 0);
-        state.Controls.Add(autoLabel, 0, 1); state.SetColumnSpan(autoLabel, 2);
-        state.Controls.Add(progress, 0, 2); state.SetColumnSpan(progress, 2);
+        state.Controls.Add(runOptionsLabel, 0, 1); state.SetColumnSpan(runOptionsLabel, 2);
+        state.Controls.Add(autoLabel, 0, 2); state.SetColumnSpan(autoLabel, 2);
+        state.Controls.Add(progress, 0, 3); state.SetColumnSpan(progress, 2);
         content.Controls.Add(state, 0, 2);
 
         var split = new SplitContainer { Size = new Size(1100, 420), Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterDistance = 195, Margin = Padding.Empty, SplitterWidth = 8, Panel1MinSize = 130, Panel2MinSize = 125, BackColor = Canvas };
@@ -139,9 +143,10 @@ public sealed class DesktopBenchmarkForm : Form
 
     private Control SettingsPanel()
     {
-        var panel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1, Padding = new Padding(12, 9, 12, 7), BackColor = Color.White, Margin = Padding.Empty };
+        var panel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1, Padding = new Padding(12, 9, 12, 7), BackColor = Color.White, Margin = Padding.Empty };
         panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
         panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 29));
         panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var heading = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Margin = Padding.Empty };
@@ -158,6 +163,14 @@ public sealed class DesktopBenchmarkForm : Form
         AddField(testOptions, "协议", protocol);
         panel.Controls.Add(testOptions, 0, 1);
 
+        var failureOptions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
+        stopOnFirstFailure.Margin = new Padding(0, 3, 15, 0);
+        failureOptions.Controls.Add(stopOnFirstFailure);
+        var failureHint = Detail("仅跳过失败节点的剩余项目和轮次，其他节点继续。");
+        failureHint.AutoSize = true; failureHint.Margin = new Padding(0, 5, 0, 0);
+        failureOptions.Controls.Add(failureHint);
+        panel.Controls.Add(failureOptions, 0, 2);
+
         var scheduleOptions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
         schedule.Margin = new Padding(0, 5, 18, 0);
         scheduleOptions.Controls.Add(schedule);
@@ -166,11 +179,12 @@ public sealed class DesktopBenchmarkForm : Form
         scheduleOptions.Controls.Add(autoSwitch);
         save.Size = new Size(117, 29); save.Margin = Padding.Empty;
         scheduleOptions.Controls.Add(save);
-        panel.Controls.Add(scheduleOptions, 0, 2);
+        panel.Controls.Add(scheduleOptions, 0, 3);
         var policy = Detail("自动切换仅用于定时全量测试，默认关闭：当前节点不全过时选全通过最佳节点；没有全通过节点时阻断。修改参数应用于下一次测试。");
         policy.Dock = DockStyle.Fill; policy.AutoEllipsis = true; policy.TextAlign = ContentAlignment.MiddleLeft;
-        panel.Controls.Add(policy, 0, 3);
+        panel.Controls.Add(policy, 0, 4);
         hints.SetToolTip(autoSwitch, "只对完整的定时全量测试生效。手动测试不切换；测试中手动改变节点或配置时跳过该次自动切换。");
+        hints.SetToolTip(stopOnFirstFailure, "默认关闭。启用后，一项请求未通过即跳过同一节点后续项目、协议和轮次；跳过不会算作通过。此选项应用于下一次手动或定时测试。");
         hints.SetToolTip(hours, "管理器需要持续运行或驻留托盘。退出后不执行测试；再次运行时由服务处理到期任务。");
         return panel;
     }
@@ -182,6 +196,7 @@ public sealed class DesktopBenchmarkForm : Form
         rankings.Columns.Add(Column("AllPassed", "全部通过", 92));
         rankings.Columns.Add(Column("Targets", "目标通过", 88));
         rankings.Columns.Add(Column("Slots", "样本通过", 94));
+        rankings.Columns.Add(Column("Skipped", "跳过", 61));
         rankings.Columns.Add(Column("Worst", "最差目标中位 / ms", 151));
         rankings.Columns.Add(Column("Mean", "平均中位 / ms", 132));
         rankings.Columns.Add(Column("Slowest", "最慢样本 / ms", 132));
@@ -215,6 +230,7 @@ public sealed class DesktopBenchmarkForm : Form
         protocol.SelectedIndexChanged += (_, _) => PreferencesChanged();
         schedule.CheckedChanged += (_, _) => PreferencesChanged();
         autoSwitch.CheckedChanged += (_, _) => PreferencesChanged();
+        stopOnFirstFailure.CheckedChanged += (_, _) => PreferencesChanged();
         save.Click += async (_, _) => await RunOperationAsync(async () =>
         {
             await manager.SaveBenchmarkPreferencesAsync(ReadPreferences());
@@ -281,6 +297,7 @@ public sealed class DesktopBenchmarkForm : Form
         if (run == null)
         {
             runLabel.Text = "尚无测速记录 · 请选择全部批准节点或当前节点";
+            runOptionsLabel.Text = "记录参数：尚无测速记录";
             progress.Value = 0;
             autoLabel.Text = snapshot.Preferences.AutoSwitchEnabled
                 ? "自动切换已开启，等待完整的定时全量结果。"
@@ -291,9 +308,12 @@ public sealed class DesktopBenchmarkForm : Form
         {
             var last = run.FinishedUtc.HasValue ? $" · 上次完成 {LocalTime(run.FinishedUtc.Value)}" : $" · 开始 {LocalTime(run.StartedUtc)}";
             var protocols = run.Options.Protocol == "both" ? "双协议" : run.Options.Protocol == "h2" ? "HTTP/2" : "HTTP/1.1";
-            runLabel.Text = $"{StatusText(run.Status)} · {(run.Trigger == "scheduled" ? "定时" : "手动")} · {run.Completed}/{run.Total} · {run.Options.Rounds}轮/{run.Options.TimeoutSeconds}s/{protocols}{last}";
+            runLabel.Text = $"{StatusText(run.Status)} · {(run.Trigger == "scheduled" ? "定时" : "手动")} · {run.Completed}/{run.Total} · 实测 {run.Attempted} / 跳过 {run.Skipped}";
             if (run.Targets.Any(DesktopBenchmarkTargets.IsLegacyHomepage))
                 runLabel.Text = "旧方案（含网页首页） · " + runLabel.Text;
+            runOptionsLabel.Text = $"记录参数：{run.Options.Rounds}轮 / 单项超时 {run.Options.TimeoutSeconds}s / {protocols} / 并发 {run.Options.Concurrency} 节点 · 首次失败跳过：{(run.Options.StopOnFirstFailure ? "开" : "关")}{last}";
+            hints.SetToolTip(runLabel, $"{runLabel.Text}\n{runOptionsLabel.Text}\n{Clean(run.Message)}");
+            hints.SetToolTip(runOptionsLabel, runOptionsLabel.Text);
             var ratio = run.Total > 0 ? Math.Clamp((double)run.Completed / run.Total, 0, 1) : 0;
             progress.Value = (int)(ratio * progress.Maximum);
             var autoState = snapshot.Preferences.AutoSwitchEnabled ? "开启" : "关闭";
@@ -302,7 +322,6 @@ public sealed class DesktopBenchmarkForm : Form
                 : " · 仅完整的定时全量测试应用；手动测试不切换。");
             autoLabel.ForeColor = Muted;
             hints.SetToolTip(autoLabel, autoLabel.Text);
-            if (!string.IsNullOrWhiteSpace(run.Message)) hints.SetToolTip(runLabel, Clean(run.Message));
         }
         if (!string.IsNullOrWhiteSpace(snapshot.Message)) hints.SetToolTip(scheduleLabel, Clean(snapshot.Message));
 
@@ -335,10 +354,13 @@ public sealed class DesktopBenchmarkForm : Form
                 var rowIndex = rankings.Rows.Add(i + 1, name, text,
                     rank == null ? "—" : $"{rank.PassedTargets}/{rank.TotalTargets}",
                     rank == null ? "—" : $"{rank.PassedSlots}/{rank.ExpectedSlots}",
+                    rank == null ? "—" : rank.SkippedSlots.ToString(CultureInfo.InvariantCulture),
                     Milliseconds(rank?.WorstMedianMs), Milliseconds(rank?.MeanMedianMs), Milliseconds(rank?.SlowestMs));
                 var row = rankings.Rows[rowIndex]; row.Tag = name;
                 row.Cells["AllPassed"].Style.ForeColor = rank?.AllPassed == true ? Green : text == "待测" ? Muted : Red;
                 row.Cells["Name"].ToolTipText = name;
+                row.Cells["Skipped"].Style.ForeColor = Muted;
+                row.Cells["Skipped"].ToolTipText = "按设置跳过的请求不计入通过；该节点仍为未全通过。";
             }
             if (!names.Contains(keep, StringComparer.Ordinal)) keep = names.FirstOrDefault() ?? "";
             foreach (DataGridViewRow row in rankings.Rows) row.Selected = row.Tag as string == keep;
@@ -357,23 +379,28 @@ public sealed class DesktopBenchmarkForm : Form
             samples.Rows.Clear();
             sampleHeading.Text = string.IsNullOrEmpty(selectedRankNode) ? "样本明细 · 选择上方节点" : "样本明细 · " + selectedRankNode;
             if (currentRun == null || string.IsNullOrEmpty(selectedRankNode)) return;
+            var nodeSamples = currentRun.Samples.Where(s => s.Name == selectedRankNode).ToList();
+            sampleHeading.Text += $"  ·  实测 {nodeSamples.Count(s => s.Status != "skipped")} / 跳过 {nodeSamples.Count(s => s.Status == "skipped")}";
             var targets = currentRun.Targets.ToDictionary(target => target.Id, StringComparer.Ordinal);
             var targetOrder = currentRun.Targets.Select((target, i) => (target.Id, i)).ToDictionary(pair => pair.Id, pair => pair.i, StringComparer.Ordinal);
-            foreach (var sample in currentRun.Samples.Where(s => s.Name == selectedRankNode)
+            foreach (var sample in nodeSamples
                 .OrderBy(s => s.Round).ThenBy(s => targetOrder.GetValueOrDefault(s.TargetId, int.MaxValue)).ThenBy(s => s.Protocol, StringComparer.Ordinal))
             {
                 targets.TryGetValue(sample.TargetId, out var target);
+                var skipped = sample.Status == "skipped";
                 var passes = SamplePassed(sample, target);
-                var reason = !string.IsNullOrWhiteSpace(sample.Error) ? sample.Error : passes ? "通过" : FailureReason(sample, target);
-                var bytes = $"{sample.Bytes:N0} / {(sample.ExpectedBytes.HasValue ? sample.ExpectedBytes.Value.ToString("N0", CultureInfo.CurrentCulture) : "未知")}";
+                var reason = skipped ? "已跳过 · " + (string.IsNullOrWhiteSpace(sample.Error) ? "此前测试未通过，按设置跳过后续测试。" : sample.Error)
+                    : !string.IsNullOrWhiteSpace(sample.Error) ? sample.Error : passes ? "通过" : FailureReason(sample, target);
+                var bytes = skipped ? "—" : $"{sample.Bytes:N0} / {(sample.ExpectedBytes.HasValue ? sample.ExpectedBytes.Value.ToString("N0", CultureInfo.CurrentCulture) : "未知")}";
                 var index = samples.Rows.Add(target?.Label ?? sample.TargetId, sample.Protocol == "h2" ? "HTTP/2" : sample.Protocol == "http/1.1" ? "HTTP/1.1" : sample.Protocol,
-                    sample.Round, sample.Http > 0 ? sample.Http.ToString(CultureInfo.InvariantCulture) : "—", sample.Complete ? "是" : "否", string.IsNullOrEmpty(sample.ContentType) ? "—" : sample.ContentType,
-                    bytes, Milliseconds(sample.TtfbMs), Milliseconds(sample.TotalMs), Clean(reason));
+                    sample.Round, sample.Http > 0 && !skipped ? sample.Http.ToString(CultureInfo.InvariantCulture) : "—", skipped ? "—" : sample.Complete ? "是" : "否", string.IsNullOrEmpty(sample.ContentType) || skipped ? "—" : sample.ContentType,
+                    bytes, skipped ? "—" : Milliseconds(sample.TtfbMs), skipped ? "—" : Milliseconds(sample.TotalMs), Clean(reason));
                 var row = samples.Rows[index];
-                row.Cells["Complete"].Style.ForeColor = sample.Complete ? Green : Red;
-                row.Cells["Result"].Style.ForeColor = passes ? Green : Red;
+                if (skipped) row.DefaultCellStyle.ForeColor = Muted;
+                row.Cells["Complete"].Style.ForeColor = skipped ? Muted : sample.Complete ? Green : Red;
+                row.Cells["Result"].Style.ForeColor = skipped ? Muted : passes ? Green : Red;
                 foreach (DataGridViewCell cell in row.Cells)
-                    cell.ToolTipText = $"{target?.Url ?? sample.TargetId}\nTLS 验证：{(sample.TlsVerified ? "是" : "否")}\n预期类型：{target?.ExpectedType ?? "入口响应"}\n{Clean(reason)}";
+                    cell.ToolTipText = $"{target?.Url ?? sample.TargetId}\nTLS 验证：{(skipped ? "未测试" : sample.TlsVerified ? "是" : "否")}\n预期类型：{target?.ExpectedType ?? "入口响应"}\n{Clean(reason)}";
             }
             if (scroll >= 0 && scroll < samples.Rows.Count) samples.FirstDisplayedScrollingRowIndex = scroll;
         }
@@ -409,6 +436,7 @@ public sealed class DesktopBenchmarkForm : Form
             protocol.SelectedIndex = value.Protocol == "h2" ? 1 : value.Protocol == "both" ? 2 : 0;
             schedule.Checked = value.ScheduleEnabled;
             autoSwitch.Checked = value.AutoSwitchEnabled;
+            stopOnFirstFailure.Checked = value.StopOnFirstFailure;
             dirty = false;
         }
         finally { applyingPreferences = false; }
@@ -418,7 +446,8 @@ public sealed class DesktopBenchmarkForm : Form
     {
         Rounds = (int)rounds.Value, TimeoutSeconds = (int)timeout.Value, Concurrency = (int)concurrency.Value,
         Protocol = protocol.SelectedIndex == 1 ? "h2" : protocol.SelectedIndex == 0 ? "http/1.1" : "both",
-        ScheduleEnabled = schedule.Checked, IntervalHours = (double)hours.Value, AutoSwitchEnabled = autoSwitch.Checked
+        ScheduleEnabled = schedule.Checked, IntervalHours = (double)hours.Value, AutoSwitchEnabled = autoSwitch.Checked,
+        StopOnFirstFailure = stopOnFirstFailure.Checked
     };
 
     private void PreferencesChanged()
@@ -435,7 +464,7 @@ public sealed class DesktopBenchmarkForm : Form
         testCurrent.Enabled = idle && loaded && !benchmarkBusy && !dirty;
         cancel.Enabled = idle && benchmarkBusy;
         save.Enabled = idle && loaded && dirty;
-        foreach (var control in new Control[] { rounds, timeout, concurrency, protocol, schedule, autoSwitch }) control.Enabled = !operation;
+        foreach (var control in new Control[] { rounds, timeout, concurrency, protocol, schedule, autoSwitch, stopOnFirstFailure }) control.Enabled = !operation;
         hours.Enabled = !operation && schedule.Checked;
         dirtyLabel.Text = !loaded ? "正在读取设置…" : dirty ? "有未保存设置，保存后可开始测速" : "设置已保存 · 参数用于下一次任务";
         dirtyLabel.ForeColor = dirty ? Blue : Muted;

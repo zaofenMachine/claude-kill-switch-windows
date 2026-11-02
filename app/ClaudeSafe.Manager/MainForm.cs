@@ -42,7 +42,7 @@ public sealed class MainForm : Form
     private readonly Button approve = ActionButton("批准所选节点");
     private readonly Button revoke = ActionButton("移除批准");
     private readonly Button importFile = ActionButton("导入 YAML / JSON");
-    private readonly Button importUrl = ActionButton("从 HTTPS 订阅导入");
+    private readonly Button subscriptions = ActionButton("订阅管理 / 更新");
     private readonly Button saveInterface = ActionButton("保存出站网卡");
     private bool busy;
     private bool refreshing;
@@ -52,6 +52,7 @@ public sealed class MainForm : Form
     private string selectedNode = "REJECT";
     private string savedInterface = "";
     private DesktopBenchmarkForm? benchmarkWindow;
+    private SubscriptionManagerForm? subscriptionWindow;
 
     public MainForm(ManagerService manager, string? screenshotPath = null)
     {
@@ -210,14 +211,14 @@ public sealed class MainForm : Form
         saveInterface.Dock = DockStyle.Top;
         saveInterface.Margin = new Padding(0, 0, 0, 5);
         side.Controls.Add(saveInterface, 0, 3);
-        side.Controls.Add(SectionTitle("本地节点配置"), 0, 5);
+        side.Controls.Add(SectionTitle("节点来源"), 0, 5);
         importFile.Dock = DockStyle.Top;
-        importUrl.Dock = DockStyle.Top;
+        subscriptions.Dock = DockStyle.Top;
         importFile.Margin = new Padding(0, 0, 0, 5);
-        importUrl.Margin = new Padding(0, 0, 0, 5);
+        subscriptions.Margin = new Padding(0, 0, 0, 5);
         side.Controls.Add(importFile, 0, 6);
-        side.Controls.Add(importUrl, 0, 7);
-        var importHint = Detail("新导入节点需手动批准；订阅变化后重新核对身份。");
+        side.Controls.Add(subscriptions, 0, 7);
+        var importHint = Detail("保存多份订阅并更新节点；新节点需手动批准。");
         importHint.Dock = DockStyle.Fill;
         side.Controls.Add(importHint, 0, 8);
         side.Controls.Add(SectionTitle("连接规则"), 0, 10);
@@ -239,6 +240,7 @@ public sealed class MainForm : Form
         var menu = new ContextMenuStrip();
         menu.Items.Add("打开 ClaudeSafe", null, (_, _) => RestoreWindow());
         menu.Items.Add("Desktop 测速 / 定时", null, (_, _) => OpenBenchmarkWindow());
+        menu.Items.Add("订阅管理 / 更新", null, (_, _) => OpenSubscriptionWindow());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("停止内核并退出", null, async (_, _) =>
         {
@@ -274,6 +276,7 @@ public sealed class MainForm : Form
     private void WireActions()
     {
         desktopBenchmark.Click += (_, _) => OpenBenchmarkWindow();
+        subscriptions.Click += (_, _) => OpenSubscriptionWindow();
         start.Click += async (_, _) => await RunAsync("正在启动专用内核…", async () => { ClearProbe(); await manager.StartAsync(); SetStatus("专用内核已启动。", false); });
         stop.Click += async (_, _) => await RunAsync("正在停止专用内核…", async () => { ClearProbe(); await manager.StopAsync(); SetStatus("专用内核已停止。", false); });
         reject.Click += async (_, _) => await RunAsync("正在阻断专用通道…", async () => { await manager.SelectAsync("REJECT"); ClearProbe(); SetStatus("已切换 REJECT，专用通道拒绝连接。", false); });
@@ -304,13 +307,7 @@ public sealed class MainForm : Form
         {
             using var dialog = new OpenFileDialog { Title = "导入 Mihomo 节点配置", Filter = "Mihomo 配置 (*.yaml;*.yml;*.json)|*.yaml;*.yml;*.json|所有文件 (*.*)|*.*", CheckFileExists = true, Multiselect = false };
             if (dialog.ShowDialog(this) != DialogResult.OK) return;
-            await RunAsync("正在导入本地节点配置…", async () => { await manager.ImportFileAsync(dialog.FileName); ClearProbe(); SetStatus("节点配置已导入。请审阅批准状态后选择节点。", false); });
-        };
-        importUrl.Click += async (_, _) =>
-        {
-            using var dialog = new SubscriptionDialog();
-            if (dialog.ShowDialog(this) != DialogResult.OK) return;
-            await RunAsync("正在通过 HTTPS 获取节点配置…", async () => { await manager.ImportUrlAsync(dialog.SubscriptionUrl); ClearProbe(); SetStatus("订阅已导入。本工具不会自动批准新节点。", false); });
+            await RunAsync("正在导入并使用本地节点配置…", async () => { await manager.ImportFileAsync(dialog.FileName); ClearProbe(); SetStatus("本地配置已保存并使用，内核保持停止。请审阅批准状态后重新启动。", false); });
         };
         saveInterface.Click += async (_, _) =>
         {
@@ -426,7 +423,7 @@ public sealed class MainForm : Form
         approve.Enabled = idle && item != null && !item.Approved && item.CanApprove;
         revoke.Enabled = idle && item?.Approved == true;
         importFile.Enabled = idle;
-        importUrl.Enabled = idle;
+        subscriptions.Enabled = idle;
         saveInterface.Enabled = idle;
         interfaces.Enabled = idle;
     }
@@ -469,6 +466,29 @@ public sealed class MainForm : Form
         }
     }
 
+    private void OpenSubscriptionWindow()
+    {
+        if (exiting) return;
+        if (subscriptionWindow == null || subscriptionWindow.IsDisposed)
+        {
+            subscriptionWindow = new SubscriptionManagerForm(manager);
+            subscriptionWindow.SourcesChanged += async (_, _) =>
+            {
+                if (IsDisposed || exiting) return;
+                ClearProbe();
+                await RefreshAsync();
+            };
+            subscriptionWindow.FormClosed += (_, _) => subscriptionWindow = null;
+            subscriptionWindow.Show(this);
+        }
+        else
+        {
+            subscriptionWindow.Show();
+            subscriptionWindow.WindowState = FormWindowState.Normal;
+            subscriptionWindow.Activate();
+        }
+    }
+
     private static Label Value(string text) => new() { Text = text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true, Font = new Font("Microsoft YaHei UI", 15F, FontStyle.Bold), ForeColor = Ink, Margin = Padding.Empty };
     private static Label Detail(string text) => new() { Text = text, Font = new Font("Microsoft YaHei UI", 8.5F), ForeColor = Muted, Margin = Padding.Empty };
     private static Label SectionTitle(string text) => new() { Text = text, Dock = DockStyle.Fill, Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold), ForeColor = Ink, Margin = Padding.Empty };
@@ -501,6 +521,7 @@ public sealed class MainForm : Form
         if (disposing)
         {
             benchmarkWindow?.Dispose();
+            subscriptionWindow?.Dispose();
             refreshTimer.Dispose();
             tray.Visible = false;
             tray.Dispose();
@@ -508,47 +529,4 @@ public sealed class MainForm : Form
         base.Dispose(disposing);
     }
 
-    private sealed class SubscriptionDialog : Form
-    {
-        private readonly TextBox address = new() { UseSystemPasswordChar = true };
-        public string SubscriptionUrl => address.Text.Trim();
-
-        public SubscriptionDialog()
-        {
-            Text = "导入 HTTPS 订阅";
-            ClientSize = new Size(530, 195);
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            StartPosition = FormStartPosition.CenterParent;
-            MaximizeBox = false;
-            MinimizeBox = false;
-            ShowInTaskbar = false;
-            BackColor = Color.White;
-            ForeColor = Ink;
-            Font = new Font("Microsoft YaHei UI", 9F);
-            Controls.Add(new Label { Text = "订阅地址", Location = new Point(20, 18), AutoSize = true, Font = new Font(Font, FontStyle.Bold) });
-            address.SetBounds(20, 48, 490, 28);
-            Controls.Add(address);
-            var show = new CheckBox { Text = "显示地址", AutoSize = true, Location = new Point(20, 88) };
-            show.CheckedChanged += (_, _) => address.UseSystemPasswordChar = !show.Checked;
-            Controls.Add(show);
-            Controls.Add(new Label { Text = "地址不会显示在主窗口；导入后仍需手动批准节点。", ForeColor = Muted, AutoSize = true, Location = new Point(20, 120) });
-            var ok = ActionButton("下载并导入", true);
-            ok.Location = new Point(261, 152);
-            ok.Click += (_, _) =>
-            {
-                if (!Uri.TryCreate(SubscriptionUrl, UriKind.Absolute, out var uri) || uri.Scheme != "https" || !string.IsNullOrEmpty(uri.UserInfo))
-                {
-                    MessageBox.Show(this, "请输入有效的 HTTPS 订阅地址。", "检查地址", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return;
-                }
-                DialogResult = DialogResult.OK;
-            };
-            var cancel = ActionButton("取消");
-            cancel.Location = new Point(390, 152);
-            cancel.DialogResult = DialogResult.Cancel;
-            Controls.AddRange(new Control[] { ok, cancel });
-            AcceptButton = ok;
-            CancelButton = cancel;
-        }
-    }
 }

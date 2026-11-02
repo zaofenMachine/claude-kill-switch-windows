@@ -26,8 +26,9 @@ public sealed partial class ManagerService : IDisposable
     private string SourcePath => Path.Combine(DataDirectory, "source.json");
     private string WorkDirectory => Path.Combine(DataDirectory, "work");
 
-    public ManagerService(string dataDirectory)
+    public ManagerService(string dataDirectory, Func<HttpMessageHandler>? subscriptionHandlerFactory = null)
     {
+        this.subscriptionHandlerFactory = subscriptionHandlerFactory ?? CreateSubscriptionHandler;
         DataDirectory = Path.GetFullPath(dataDirectory);
         Directory.CreateDirectory(DataDirectory);
         try
@@ -36,10 +37,11 @@ public sealed partial class ManagerService : IDisposable
                 ? JsonSerializer.Deserialize<ManagerSettings>(File.ReadAllText(SettingsPath), ManagerJson.Options) ?? throw new FormatException()
                 : new ManagerSettings();
             CoreConfig.ValidatePins(settings.Pins);
-            nodes = File.Exists(SourcePath) ? CoreConfig.ParseSource(File.ReadAllText(SourcePath)) : [];
+            nodes = [];
+            InitializeSubscriptions();
         }
         catch (SafeOperationException) { throw; }
-        catch { throw new SafeOperationException("本机数据无法读取。请检查 settings.json 和 source.json；程序不会覆盖损坏的配置。"); }
+        catch { throw new SafeOperationException("本机数据无法读取。请检查 settings.json 和 subscriptions.json；程序不会覆盖损坏的配置。"); }
         InitializeBenchmarks();
     }
 
@@ -206,48 +208,6 @@ public sealed partial class ManagerService : IDisposable
             }
             catch { await StopCoreAsync().ConfigureAwait(false); throw new SafeOperationException("切换未通过核对，已停止专用内核以保持阻断。"); }
         }
-        finally { gate.Release(); }
-    }
-
-    public async Task ImportFileAsync(string path)
-    {
-        var info = new FileInfo(path);
-        if (!info.Exists || info.Length > CoreConfig.MaximumSourceBytes) throw new SafeOperationException("文件不存在或超过 16 MB。");
-        string text;
-        try { text = await File.ReadAllTextAsync(path).ConfigureAwait(false); } catch { throw new SafeOperationException("无法读取所选配置文件。"); }
-        await ImportTextAsync(text).ConfigureAwait(false);
-    }
-
-    public async Task ImportUrlAsync(string url)
-    {
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps || uri.UserInfo.Length > 0 || uri.Fragment.Length > 0)
-            throw new SafeOperationException("请输入没有用户名或片段的 HTTPS 订阅地址。");
-        try
-        {
-            using var http = new HttpClient(new SocketsHttpHandler { UseProxy = false, AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(30) };
-            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            using var response = await http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, deadline.Token).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode) throw new SafeOperationException("订阅下载失败；不自动跟随重定向。可先下载为文件再导入。");
-            var bytes = await ReadLimitedAsync(response, CoreConfig.MaximumSourceBytes, deadline.Token).ConfigureAwait(false);
-            await ImportTextAsync(new UTF8Encoding(false, true).GetString(bytes)).ConfigureAwait(false);
-        }
-        catch (SafeOperationException) { throw; }
-        catch { throw new SafeOperationException("订阅无法下载或格式无效。可将配置下载为 YAML/JSON 后导入；地址不会写入日志。"); }
-    }
-
-    private async Task ImportTextAsync(string text)
-    {
-        var candidate = CoreConfig.ParseSource(text);
-        await gate.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            ThrowIfDisposed(); configurationRevision++; await StopCoreAsync().ConfigureAwait(false);
-            var wrapper = new JsonObject { ["proxies"] = new JsonArray(candidate.Select(n => n.DeepClone()).ToArray()) };
-            AtomicWrite(SourcePath, wrapper.ToJsonString(ManagerJson.Options)); nodes = candidate;
-            message = "节点来源已导入，内核保持停止。只有批准身份完全匹配的节点可被选择。";
-        }
-        catch (SafeOperationException) { throw; }
-        catch { throw new SafeOperationException("来源未能保存，专用内核保持停止。"); }
         finally { gate.Release(); }
     }
 
