@@ -7,6 +7,12 @@ using ClaudeSafe.Manager;
 Console.InputEncoding = new UTF8Encoding(false);
 Console.OutputEncoding = new UTF8Encoding(false);
 
+if (args.Length > 1 && args[0] == "--node-list-preview")
+{
+    NodeListViewChecks.SavePreview(args[1]);
+    return;
+}
+
 if (args.Length > 1 && args[0] == "--sync-dispose")
 {
     try
@@ -193,6 +199,7 @@ Check("update restore refuses malformed oversized and control-character payloads
     foreach (var encoded in new[] { "%%%", new string('A', 2049), Convert.ToBase64String([255]), Convert.ToBase64String(Encoding.UTF8.GetBytes("REJECT\0")) })
         Refuses(() => ManagerStartupRequest.DecodeApprovedNode(encoded, snapshot));
 });
+NodeListViewChecks.Run(Check);
 Console.WriteLine($"{passed} offline manager checks passed.");
 
 internal sealed class NoPumpSynchronizationContext : SynchronizationContext

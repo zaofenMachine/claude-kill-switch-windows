@@ -21,7 +21,8 @@ public sealed class MainForm : Form
     private readonly string? screenshotPath;
     private readonly System.Windows.Forms.Timer refreshTimer = new() { Interval = 3000 };
     private readonly NotifyIcon tray = new();
-    private readonly DataGridView nodes = new();
+    private readonly NodeListView nodeList = new();
+    private DataGridView nodes => nodeList.Grid;
     private readonly ComboBox interfaces = new();
     private readonly Label coreValue = Value("读取中…");
     private readonly Label coreDetail = Detail("尚未启动专用内核");
@@ -31,7 +32,6 @@ public sealed class MainForm : Form
     private readonly Label exitDetail = Detail("匿名检测，不发送聊天请求");
     private readonly Label listenerValue = Value("127.0.0.1:17987");
     private readonly Label listenerDetail = Detail("Desktop 固定代理入口");
-    private readonly Label count = Detail("正在读取本地配置");
     private readonly Label status = Detail("就绪");
     private readonly Button start = ActionButton("启动内核", true);
     private readonly Button stop = ActionButton("停止内核");
@@ -153,46 +153,15 @@ public sealed class MainForm : Form
         body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
         content.Controls.Add(body, 0, 2);
 
-        var listPanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, BackColor = Color.White, Padding = new Padding(14, 10, 14, 10), Margin = new Padding(0, 0, 12, 0) };
-        listPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 51));
+        var listPanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, BackColor = Color.White, Padding = new Padding(14, 10, 14, 10), Margin = new Padding(0, 0, 12, 0) };
         listPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         listPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 47));
-        var listHeading = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
-        var heading = new Label { Text = "节点清单", AutoSize = true, Font = new Font(Font.FontFamily, 11F, FontStyle.Bold), Location = new Point(1, 1) };
-        count.Location = new Point(2, 27);
-        count.AutoSize = true;
-        listHeading.Controls.AddRange(new Control[] { heading, count });
-        listPanel.Controls.Add(listHeading, 0, 0);
-
-        nodes.Dock = DockStyle.Fill;
-        nodes.ReadOnly = true;
-        nodes.AllowUserToAddRows = false;
-        nodes.AllowUserToDeleteRows = false;
-        nodes.AllowUserToResizeRows = false;
-        nodes.AllowUserToOrderColumns = false;
-        nodes.MultiSelect = false;
-        nodes.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        nodes.RowHeadersVisible = false;
-        nodes.BackgroundColor = Color.White;
-        nodes.BorderStyle = BorderStyle.None;
-        nodes.GridColor = Color.FromArgb(234, 238, 244);
-        nodes.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
-        nodes.EnableHeadersVisualStyles = false;
-        nodes.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor = Canvas, ForeColor = Muted, Font = new Font(Font.FontFamily, 9F), Padding = new Padding(7, 0, 3, 0), SelectionBackColor = Canvas };
-        nodes.ColumnHeadersHeight = 33;
-        nodes.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-        nodes.DefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.White, ForeColor = Ink, SelectionBackColor = Color.FromArgb(230, 239, 253), SelectionForeColor = Ink, Padding = new Padding(7, 2, 3, 2), Font = new Font(Font.FontFamily, 9F) };
-        nodes.RowTemplate.Height = 38;
-        nodes.Columns.Add(new DataGridViewTextBoxColumn { Name = "NodeName", HeaderText = "节点名称", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, MinimumWidth = 200 });
-        nodes.Columns.Add(new DataGridViewTextBoxColumn { Name = "Protocol", HeaderText = "协议", Width = 78 });
-        nodes.Columns.Add(new DataGridViewTextBoxColumn { Name = "Approval", HeaderText = "批准", Width = 70 });
-        nodes.Columns.Add(new DataGridViewTextBoxColumn { Name = "Availability", HeaderText = "状态", Width = 100 });
         nodes.SelectionChanged += (_, _) => UpdateActions();
         nodes.CellDoubleClick += async (_, e) => { if (e.RowIndex >= 0 && select.Enabled) await SelectNodeAsync(); };
-        listPanel.Controls.Add(nodes, 0, 1);
+        listPanel.Controls.Add(nodeList, 0, 0);
         var nodeActions = new FlowLayoutPanel { Dock = DockStyle.Fill, Margin = Padding.Empty, Padding = new Padding(0, 9, 0, 0), WrapContents = false };
         nodeActions.Controls.AddRange(new Control[] { select, approve, revoke });
-        listPanel.Controls.Add(nodeActions, 0, 2);
+        listPanel.Controls.Add(nodeActions, 0, 1);
         body.Controls.Add(listPanel, 0, 0);
 
         var side = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 12, Padding = new Padding(15, 12, 15, 10), BackColor = Color.White, Margin = Padding.Empty };
@@ -375,33 +344,7 @@ public sealed class MainForm : Form
                     interfaces.SelectedItem = savedInterface;
                 }
             }
-            var chosen = SelectedItem()?.Name;
-            var scroll = nodes.FirstDisplayedScrollingRowIndex;
-            nodes.SuspendLayout();
-            nodes.Rows.Clear();
-            var approvedCount = 0;
-            foreach (var node in state.Nodes)
-            {
-                if (node.Approved) approvedCount++;
-                var active = node.Name == state.Selected;
-                var availability = active ? "使用中" : node.Eligible ? "可选择" : "身份不符";
-                if (!node.Approved && node.Eligible && !active) availability = "待批准";
-                var index = nodes.Rows.Add(node.Name, node.Type, node.Approved ? "已批准" : "未批准", availability);
-                var row = nodes.Rows[index];
-                row.Tag = node;
-                row.Cells["Availability"].Style.ForeColor = active ? Green : node.Eligible ? Muted : Red;
-                row.Cells["Approval"].Style.ForeColor = node.Approved ? Green : Muted;
-                foreach (DataGridViewCell cell in row.Cells) cell.ToolTipText = node.Reason ?? "";
-                if (node.Name == chosen) row.Selected = true;
-            }
-            if (chosen != null)
-            {
-                foreach (DataGridViewRow row in nodes.Rows) row.Selected = (row.Tag as NodeSummary)?.Name == chosen;
-            }
-            else nodes.ClearSelection();
-            if (scroll >= 0 && scroll < nodes.Rows.Count) nodes.FirstDisplayedScrollingRowIndex = scroll;
-            nodes.ResumeLayout();
-            count.Text = $"{state.Nodes.Count} 个节点  ·  {approvedCount} 个已批准  ·  REJECT 始终可用";
+            nodeList.SetNodes(state.Nodes, state.Selected);
             tray.Text = "ClaudeSafe · " + (running ? "运行中" : "已停止");
             if (!string.IsNullOrWhiteSpace(state.Message) && status.Text == "就绪") SetStatus(state.Message, false);
         }
