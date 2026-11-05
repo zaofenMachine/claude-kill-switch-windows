@@ -1,6 +1,6 @@
 # Claude Kill Switch for Windows
 
-新增 [ClaudeSafe Windows 管理器](docs/standalone-manager.md)：通过独立 Mihomo 内核管理专用通道，提供节点批准、切换、[多订阅管理与更新](docs/subscriptions.md)、配置导入、匿名出口检查与托盘。Clash Verge 可继续管理日常系统代理或 TUN；迁移需要先移交专用端口，并保留已有 WFP 与 AppLocker。
+新增 [ClaudeSafe Windows 管理器](docs/standalone-manager.md)：采用 WinUI 3 与 Fluent Design，支持 Windows 10 22H2 / Windows 11（x64）；通过独立 Mihomo 内核管理专用通道，提供节点批准、切换、[多订阅管理与更新](docs/subscriptions.md)、配置导入、匿名出口检查与托盘。Clash Verge 可继续管理日常系统代理或 TUN；迁移需要先移交专用端口，并保留已有 WFP 与 AppLocker。
 
 已集成 [Desktop 实际资源测速及定时测试](docs/desktop-benchmarks.md)：只测 Desktop 实际 JS/CSS 与 API 匿名入口，不测网页首页或登录；提供双协议逐轮结果和智能排名。默认每 24 小时测试，自动切换默认关闭，启用后只在当前节点未全通过时选择全通过最佳节点。
 

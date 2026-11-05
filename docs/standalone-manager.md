@@ -4,11 +4,15 @@ ClaudeSafe Manager 使用自己启动的 Mihomo 子进程。日常代理由 Clas
 
 ## 构建与准备
 
-需要 Windows、.NET 10 SDK（构建）及 .NET 10 Desktop Runtime（运行）：
+管理器采用 **WinUI 3 / Windows App SDK 2.6.5**，支持 **Windows 10 22H2（19045）与 Windows 11，x64**。构建需要 Windows 和 .NET 10 SDK，通过 NuGet 还原锁定的依赖：
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File scripts\Build-Manager.ps1
 ```
+
+默认发布为非 MSIX、自包含的桌面应用，包含 .NET 与 Windows App SDK 运行时，无需另外安装 Desktop Runtime。运行时需保留整个输出目录，不能只复制 EXE；Mihomo 与私有配置仍独立准备。
+
+界面采用 Fluent 导航、卡片、对话框和系统主题资源，可选择跟随 Windows、浅色或深色。Windows 11 支持时启用 Mica；Windows 10 使用纯色背景，不依赖 Windows 11 专属效果。核心服务拆分到 `app/ClaudeSafe.Manager.Core`，节点批准、配置生成、Job 生命周期、测速和订阅实现保持原样，WinUI 项目只负责显示与操作交互。
 
 Mihomo 不随仓库分发。自行从可信来源获取并核验后，放在本地数据目录的 `bin\claude-safe-mihomo.exe`。数据目录默认 `%LOCALAPPDATA%\ClaudeSafe\Manager`，也可以用 `--data` 指定。
 
@@ -70,7 +74,9 @@ Verge TUN 会改变系统路由和 DNS 行为，需要在实际机器上检查�
 4. 停止/崩溃专用管理器，确认受保护程序无法改走普通代理或直连，对照程序仍能连接。
 5. 保留系统规则比较与真实客户端证据；不把 TCP 快照、纯配置测试或浏览器出口扩展为零泄漏证明。
 
-开发检查：`dotnet run --project app/ClaudeSafe.Manager.Tests`。实际联网验收需要另外准备本机私有配置。
+开发检查：运行 `app/ClaudeSafe.Manager.Tests`、`BenchmarkTests`、`PolicyTests`、`ScheduleTests` 和 `SubscriptionTests` 五个检查项目；它们直接引用核心项目，无需启动界面。CI 另外自包含发布 WinUI 项目，避免核心测试掩盖 XAML 构建问题。实际联网验收需要另外准备本机私有配置。
+
+最低版本通过项目的 `TargetPlatformMinVersion` / `SupportedOSPlatformVersion` 固定为 `10.0.19045.0`，Mica 与标题栏定制调用均检查系统支持。目标版本及编译通过不代替 Windows 10 实机验收；系统 WFP / AppLocker 的可用条件仍应按部署文档独立核对。
 
 ## 一次本机迁移的记录
 

@@ -1,0 +1,49 @@
+<UserControl x:Class="ClaudeSafe.Manager.SubscriptionsView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="using:ClaudeSafe.Manager">
+    <Grid RowSpacing="16">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel Spacing="12">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button x:Name="AddButton" Content="添加 HTTPS 订阅" Style="{StaticResource AccentButtonStyle}" Click="OnAdd"/>
+                <Button x:Name="ImportButton" Content="导入本地文件" Click="OnImport"/>
+                <Button x:Name="UpdateButton" Content="更新所选" Click="OnUpdate"/>
+                <Button x:Name="UpdateAllButton" Content="更新全部订阅" Click="OnUpdateAll"/>
+            </StackPanel>
+            <TextBlock x:Name="Current" Text="正在读取来源…" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
+        </StackPanel>
+        <Border Grid.Row="1" Style="{StaticResource CardStyle}" Padding="12">
+            <Grid RowSpacing="12">
+                <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <ListView x:Name="Sources" SelectionMode="Single" SelectionChanged="OnSelectionChanged" ItemContainerStyle="{StaticResource StretchListItem}" AutomationProperties.Name="订阅来源">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="local:SubscriptionRow">
+                            <Grid ColumnSpacing="18" Padding="0,6">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="110"/><ColumnDefinition Width="210"/></Grid.ColumnDefinitions>
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{x:Bind SourceDescription}" Style="{StaticResource CaptionStyle}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="6"><TextBlock Text="{x:Bind ActiveLabel}" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/><TextBlock Text="{x:Bind NodeCountLabel}" Style="{StaticResource CaptionStyle}"/></StackPanel>
+                                <StackPanel Grid.Column="2" Spacing="6"><TextBlock Text="{x:Bind ResultLabel}"/><TextBlock Text="{x:Bind UpdatedLabel}" Style="{StaticResource CaptionStyle}"/></StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+                <TextBlock x:Name="Empty" Text="还没有订阅来源。添加订阅或导入本地配置，即可开始审阅节点。" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="420" Foreground="{ThemeResource TextFillColorSecondaryBrush}" IsHitTestVisible="False"/>
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="UseButton" Content="使用所选来源" Style="{StaticResource AccentButtonStyle}" Click="OnUse"/>
+                    <Button x:Name="RenameButton" Content="重命名" Click="OnRename"/>
+                    <Button x:Name="ReplaceButton" Content="更换订阅地址" Click="OnReplace"/>
+                    <Button x:Name="RemoveButton" Content="删除来源" Click="OnRemove"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+        <Border Grid.Row="2" Style="{StaticResource CardStyle}">
+            <StackPanel Spacing="8">
+                <TextBlock x:Name="SelectionHint" Text="新增订阅先保存缓存，使用后才切换专用通道。" TextWrapping="Wrap"/>
+                <TextBlock Text="列表只显示订阅域名。切换来源或更新正在使用的节点内容后，内核会停止，等待重新审阅和启动。" Style="{StaticResource CaptionStyle}"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

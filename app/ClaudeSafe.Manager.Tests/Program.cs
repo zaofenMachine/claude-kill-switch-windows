@@ -7,12 +7,6 @@ using ClaudeSafe.Manager;
 Console.InputEncoding = new UTF8Encoding(false);
 Console.OutputEncoding = new UTF8Encoding(false);
 
-if (args.Length > 1 && args[0] == "--node-list-preview")
-{
-    NodeListViewChecks.SavePreview(args[1]);
-    return;
-}
-
 if (args.Length > 1 && args[0] == "--sync-dispose")
 {
     try

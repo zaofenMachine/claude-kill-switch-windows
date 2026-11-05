@@ -1,9 +1,7 @@
-using System;
-using System.IO;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading;
-using System.Windows.Forms;
+using Microsoft.UI.Dispatching;
 
 namespace ClaudeSafe.Manager;
 
@@ -12,65 +10,65 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
-        ApplicationConfiguration.Initialize();
-        var data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClaudeSafe", "Manager");
-        string? screenshot = null;
-        string? benchmarkScreenshot = null;
-        string? subscriptionsScreenshot = null;
-        string? restoreNode = null;
-        for (var i = 0; i < args.Length; i++)
-        {
-            if (args[i] == "--data" && i + 1 < args.Length) data = args[++i];
-            else if (args[i] == "--screenshot" && i + 1 < args.Length) screenshot = args[++i];
-            else if (args[i] == "--benchmark-screenshot" && i + 1 < args.Length) benchmarkScreenshot = args[++i];
-            else if (args[i] == "--subscriptions-screenshot" && i + 1 < args.Length) subscriptionsScreenshot = args[++i];
-            else if (args[i] == "--restore-node-base64" && i + 1 < args.Length) restoreNode = args[++i];
-        }
-
+        WinRT.ComWrappersSupport.InitializeComWrappers();
+        var options = LaunchOptions.Parse(args);
         try
         {
-            data = Path.GetFullPath(data);
+            var data = Path.GetFullPath(options.DataDirectory);
             var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(data.ToUpperInvariant())))[..20];
             using var instance = new Mutex(true, @"Local\ClaudeSafe.Manager." + key, out var created);
             if (!created)
             {
-                MessageBox.Show("此配置目录的 ClaudeSafe 管理窗口已经运行。请从系统托盘打开。", "ClaudeSafe", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox(IntPtr.Zero, "此配置目录的 ClaudeSafe 已经运行。请从系统托盘打开。", "ClaudeSafe", 0x40);
                 return;
             }
+            // The original ownership lifetime survives the UI migration: disposal stops
+            // the owned core; forced termination closes Windows' kill-on-close Job.
             using var manager = new ManagerService(data);
-            if (benchmarkScreenshot is not null || subscriptionsScreenshot is not null)
+            Microsoft.UI.Xaml.Application.Start(_ =>
             {
-                using Form preview = benchmarkScreenshot is not null
-                    ? new DesktopBenchmarkForm(manager)
-                    : new SubscriptionManagerForm(manager);
-                var file = Path.GetFullPath(benchmarkScreenshot ?? subscriptionsScreenshot!);
-                preview.Shown += async (_, _) =>
-                {
-                    await Task.Delay(1000);
-                    using var bitmap = new System.Drawing.Bitmap(preview.Width, preview.Height);
-                    preview.DrawToBitmap(bitmap, new System.Drawing.Rectangle(0, 0, preview.Width, preview.Height));
-                    Directory.CreateDirectory(Path.GetDirectoryName(file)!);
-                    bitmap.Save(file, System.Drawing.Imaging.ImageFormat.Png);
-                    preview.Close();
-                };
-                Application.Run(preview);
-                return;
-            }
-            var form = new MainForm(manager, screenshot);
-            if (restoreNode is not null)
-            {
-                form.Shown += async (_, _) =>
-                {
-                    try { await ManagerStartupRequest.RestoreAsync(manager, restoreNode); }
-                    catch (SafeOperationException e)
-                    { if (!form.IsDisposed) MessageBox.Show(form, e.Message, "更新后恢复", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
-                };
-            }
-            Application.Run(form);
+                SynchronizationContext.SetSynchronizationContext(new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread()));
+                new App(manager, options);
+            });
         }
-        catch (Exception)
+        catch (Exception error)
         {
-            MessageBox.Show("管理器无法启动。请检查本地数据目录是否可读写，或查看本机诊断记录。", "ClaudeSafe", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Environment.ExitCode = 1;
+            if (options.DiagnosticDirectory is { } directory)
+                try { Directory.CreateDirectory(directory); File.WriteAllText(Path.Combine(directory, "startup-error.txt"), error.ToString()); } catch { }
+            MessageBox(IntPtr.Zero, "管理器无法启动。请检查程序文件和本地数据目录是否完整。", "ClaudeSafe", 0x10);
         }
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "MessageBoxW")]
+    private static extern int MessageBox(IntPtr window, string text, string title, uint type);
+}
+
+internal sealed class LaunchOptions
+{
+    public string DataDirectory { get; private set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClaudeSafe", "Manager");
+    public string? RestoreNode { get; private set; }
+    public string Page { get; private set; } = "channel";
+    public string? Screenshot { get; private set; }
+    public bool ExitAfterScreenshot { get; private set; }
+    public string? DiagnosticDirectory { get; private set; }
+
+    public static LaunchOptions Parse(string[] args)
+    {
+        var result = new LaunchOptions();
+        for (var i = 0; i < args.Length; i++)
+        {
+            if (i + 1 >= args.Length) continue;
+            switch (args[i])
+            {
+                case "--data": result.DataDirectory = args[++i]; break;
+                case "--restore-node-base64": result.RestoreNode = args[++i]; break;
+                case "--screenshot": result.Screenshot = args[++i]; break;
+                case "--benchmark-screenshot": result.Page = "benchmarks"; result.Screenshot = args[++i]; result.ExitAfterScreenshot = true; break;
+                case "--subscriptions-screenshot": result.Page = "subscriptions"; result.Screenshot = args[++i]; result.ExitAfterScreenshot = true; break;
+                case "--diagnostics": result.DiagnosticDirectory = args[++i]; break;
+            }
+        }
+        return result;
     }
 }

@@ -13,9 +13,10 @@
 | Node.js | https://nodejs.org/ | 配置生成、只读检查、离线测试 |
 | Python | https://www.python.org/ | XML/配置生成和比对；公开工具仅使用标准库 |
 | .NET 10 | https://dotnet.microsoft.com/ | 独立 Windows 管理器的构建与运行 |
+| Windows App SDK 2.6.5 / WinUI 3 | https://github.com/microsoft/WindowsAppSDK | Fluent 桌面界面及窗口能力；NuGet 锁定版本和内容哈希 |
 | YamlDotNet 16.3.0 | https://github.com/aaubry/YamlDotNet | 管理器的 YAML 解析/生成；NuGet 锁定版本及内容哈希，MIT 许可见 LICENSES/YamlDotNet-MIT.txt |
 
-构建管理器会通过 NuGet 获取 YamlDotNet，并在本机构建目录包含该 DLL 及其许可；源码仓库不提交第三方二进制。
+构建管理器会通过 NuGet 获取 YamlDotNet、Windows App SDK 及其依赖，自包含发布目录还包含 .NET 运行时。应完整保留发布目录中的组件和许可文件；源码仓库不提交第三方二进制。Windows App SDK 的源码和再分发条款以官方包及其 [LICENSE](https://github.com/microsoft/WindowsAppSDK/blob/main/LICENSE) 为准。
 
 Windows PowerShell、.NET Framework 编译器和 WFP/AppLocker API 属于 Windows 平台能力；具体可用性依 Windows 版本与安装状态而定。
 

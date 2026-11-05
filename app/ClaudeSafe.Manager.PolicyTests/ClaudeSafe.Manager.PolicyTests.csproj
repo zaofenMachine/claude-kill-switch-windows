@@ -6,5 +6,5 @@
     <Nullable>enable</Nullable>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
-  <ItemGroup><ProjectReference Include="../ClaudeSafe.Manager/ClaudeSafe.Manager.csproj" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../ClaudeSafe.Manager.Core/ClaudeSafe.Manager.Core.csproj" /></ItemGroup>
 </Project>

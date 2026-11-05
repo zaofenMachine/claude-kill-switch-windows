@@ -19,7 +19,9 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Build Windows manager and run offline safety checks
+      - name: Publish WinUI 3 manager with locked dependencies
+        run: ./scripts/Build-Manager.ps1 -OutputDirectory runtime/manager-app
+      - name: Run offline safety checks
         run: |
           $ErrorActionPreference='Stop'
           foreach($project in @('app/ClaudeSafe.Manager.Tests','app/ClaudeSafe.Manager.BenchmarkTests','app/ClaudeSafe.Manager.PolicyTests','app/ClaudeSafe.Manager.ScheduleTests','app/ClaudeSafe.Manager.SubscriptionTests')) {
