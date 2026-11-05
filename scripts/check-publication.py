@@ -23,8 +23,8 @@ patterns = {
 failures = []
 # Exact reviewed application artwork only; arbitrary images/binaries remain prohibited.
 approved_artwork = {
-    'app/ClaudeSafe.Manager/Assets/ClaudeSafe.ico': 'b60a1cebc2d801277bfc71eb8d24806c430ebcd1f1da9569748facaff63402b9',
-    'app/ClaudeSafe.Manager/Assets/ClaudeSafe.png': '3cce2a4640b2c6d93ec8e50ff64ddd88409f5a6a31d70fea7b1cb0ef5c8bda10',
+    'app/ClaudeSafe.Manager/Assets/ClaudeSafe.ico': 'ff925cc3bce19affc4d968afe91254141a7a886a52f5421febb8b473ed9ef024',
+    'app/ClaudeSafe.Manager/Assets/ClaudeSafe.png': '7e37c09ea8cb7536b976a00abce84a1a30d6179cf7719a52d2c25014c7363337',
 }
 count = 0
 for name in paths:

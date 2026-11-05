@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="title description">
+  <title id="title">Clawd · 斗笠长八字胡</title>
+  <desc id="description">橙色像素小螃蟹 Clawd，戴竹色斗笠，留两撇向外下垂的黑色长八字胡。方形应用图标，纯矢量图形。</desc>
+  <g id="clawd" fill="#D97757">
+    <path id="body" d="M136 236H376V274H392V290H424V330H396V308H376V350H360V370H152V350H136V308H116V330H88V290H120V274H136Z"/>
+    <path id="feet" d="M152 362H180V402H152ZM208 362H236V402H208ZM276 362H304V402H276ZM332 362H360V402H332Z"/>
+  </g>
+  <g id="douli">
+    <path id="brim-underside" d="M64 238Q256 266 448 238L256 216Z" fill="#9D7234"/>
+    <path id="hat-cone" d="M256 88L64 238Q256 224 448 238Z" fill="#D1A04D"/>
+    <path id="hat-right-panel" d="M256 88L448 238Q391 234 340 232Z" fill="#BE8C3E"/>
+    <path id="hat-center-panel" d="M256 88L172 232Q256 228 340 232Z" fill="#EBC778"/>
+  </g>
+  <g id="eyes" fill="#29231F">
+    <path d="M182 260H204V294H182ZM308 260H330V294H308Z"/>
+  </g>
+  <g id="moustache" fill="#29231F">
+    <path id="moustache-left" d="M252 304C242 310 226 307 210 314C182 326 162 351 144 372C124 394 105 408 80 416C122 414 156 402 181 381C196 368 208 355 220 348C238 338 248 324 252 304Z"/>
+    <path id="moustache-right" d="M260 304C270 310 286 307 302 314C330 326 350 351 368 372C388 394 407 408 432 416C390 414 356 402 331 381C316 368 304 355 292 348C274 338 264 324 260 304Z"/>
+  </g>
+</svg>
