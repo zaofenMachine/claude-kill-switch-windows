@@ -32,6 +32,7 @@ public sealed partial class MainWindow : Window
         this.manager = manager; this.options = options;
         InitializeComponent();
         Title = "ClaudeSafe · 专用通道管理器";
+        AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "ClaudeSafe.ico"));
         var scale = NativeTray.DpiScale(WinRT.Interop.WindowNative.GetWindowHandle(this));
         var desiredWidth = (int)(1240 * scale); var desiredHeight = (int)(860 * scale);
         AppWindow.Resize(new SizeInt32(desiredWidth, desiredHeight));

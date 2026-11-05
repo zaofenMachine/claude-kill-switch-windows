@@ -14,6 +14,7 @@ internal sealed class NativeTray : IDisposable
     private readonly uint taskbarCreated = RegisterWindowMessage("TaskbarCreated");
     private const uint CallbackMessage = 0x8000 + 73;
     private NotifyIconData data;
+    private readonly IntPtr customIcon;
     private bool disposed;
     public bool SystemShutdown { get; private set; }
 
@@ -24,10 +25,12 @@ internal sealed class NativeTray : IDisposable
         this.navigate = navigate; this.exit = exit; this.shutdown = shutdown;
         callback = WndProc;
         if (!SetWindowSubclass(hwnd, callback, 73, 0)) throw new InvalidOperationException("Notification window unavailable.");
+        var iconSize = (int)Math.Round(16 * DpiScale(hwnd));
+        customIcon = LoadImage(IntPtr.Zero, Path.Combine(AppContext.BaseDirectory, "Assets", "ClaudeSafe.ico"), 1, iconSize, iconSize, 0x10);
         data = new NotifyIconData { Size = (uint)Marshal.SizeOf<NotifyIconData>(), Window = hwnd, Id = 1,
-            Flags = 1 | 2 | 4, CallbackMessage = CallbackMessage, Icon = LoadIcon(IntPtr.Zero, new IntPtr(32518)),
+            Flags = 1 | 2 | 4, CallbackMessage = CallbackMessage, Icon = customIcon != IntPtr.Zero ? customIcon : LoadIcon(IntPtr.Zero, new IntPtr(32518)),
             Tip = "ClaudeSafe · 已停止", Info = "", InfoTitle = "" };
-        if (!ShellNotifyIcon(0, ref data)) { RemoveWindowSubclass(hwnd, callback, 73); throw new InvalidOperationException("Notification icon unavailable."); }
+        if (!ShellNotifyIcon(0, ref data)) { RemoveWindowSubclass(hwnd, callback, 73); if (customIcon != IntPtr.Zero) DestroyIcon(customIcon); throw new InvalidOperationException("Notification icon unavailable."); }
     }
     public void Update(bool running)
     {
@@ -90,6 +93,7 @@ internal sealed class NativeTray : IDisposable
     {
         if (disposed) return; disposed = true;
         ShellNotifyIcon(2, ref data); RemoveWindowSubclass(hwnd, callback, 73);
+        if (customIcon != IntPtr.Zero) DestroyIcon(customIcon);
     }
     [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate IntPtr SubclassProc(IntPtr window, uint message, UIntPtr wParam, IntPtr lParam, UIntPtr id, UIntPtr reference);
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] private struct NotifyIconData
@@ -112,6 +116,8 @@ internal sealed class NativeTray : IDisposable
     [DllImport("comctl32.dll")] private static extern IntPtr DefSubclassProc(IntPtr hwnd, uint message, UIntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern uint RegisterWindowMessage(string name);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr LoadIcon(IntPtr instance, IntPtr name);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "LoadImageW")] private static extern IntPtr LoadImage(IntPtr instance, string name, uint type, int width, int height, uint flags);
+    [DllImport("user32.dll")] private static extern bool DestroyIcon(IntPtr icon);
     [DllImport("user32.dll")] private static extern IntPtr CreatePopupMenu();
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool AppendMenu(IntPtr menu, uint flags, nuint id, string text);
     [DllImport("user32.dll")] private static extern bool DestroyMenu(IntPtr menu);

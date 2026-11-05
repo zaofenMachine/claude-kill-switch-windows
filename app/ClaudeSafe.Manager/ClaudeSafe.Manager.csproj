@@ -18,11 +18,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/ClaudeSafe.ico</ApplicationIcon>
     <AssemblyName>ClaudeSafe.Manager</AssemblyName>
     <RootNamespace>ClaudeSafe.Manager</RootNamespace>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
   <ItemGroup>
+    <Content Update="Assets/ClaudeSafe.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Update="Assets/ClaudeSafe.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <ProjectReference Include="../ClaudeSafe.Manager.Core/ClaudeSafe.Manager.Core.csproj" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.6.5" GeneratePathProperty="true" />
     <Content Include="$(PkgMicrosoft_WindowsAppSDK)\license.txt" Link="LICENSES/WindowsAppSDK-license.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

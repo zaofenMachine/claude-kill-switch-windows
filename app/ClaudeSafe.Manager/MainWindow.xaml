@@ -5,7 +5,7 @@
         <Grid.RowDefinitions><RowDefinition Height="48"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <Grid x:Name="TitleBar" Background="Transparent" Padding="18,0,150,0">
             <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                <FontIcon Glyph="&#xE83D;" FontSize="18" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                <Image Source="ms-appx:///Assets/ClaudeSafe.png" Width="24" Height="24" Stretch="Uniform" AutomationProperties.Name="ClaudeSafe 图标"/>
                 <TextBlock Text="ClaudeSafe" FontWeight="SemiBold" VerticalAlignment="Center"/>
                 <TextBlock Text="专用通道管理器" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="8,0,0,0" VerticalAlignment="Center"/>
             </StackPanel>
